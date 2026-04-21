@@ -1,170 +1,116 @@
-# 📱 SMS Expense Tracker (Flutter)
+# 📱 Personal Expense Tracker App (Flutter + SMS)
 
-A smart Flutter application that automatically tracks your expenses by reading SMS alerts (bank transactions, debit/credit messages) and converting them into structured financial insights.
+Android-first app that reads bank SMS alerts, extracts expenses, and shows daily/weekly/monthly spending insights.
 
----
+## ✅ Current MVP Scaffold Included
 
-## 🚀 Features
+This repository now includes a starter Flutter structure with:
 
-* 📩 Read SMS messages (bank transaction alerts)
-* 💸 Automatically detect expenses (debit/credit)
-* 🧠 Extract amount, merchant, and date using parsing logic
-* 🗂️ Categorize transactions (Food, Travel, Shopping, etc.)
-* 📊 Dashboard with:
-
-  * Daily spending
-  * Weekly & monthly summaries
-* 📈 Visual charts for expense analysis
-* 🔐 Secure and private (data stored locally only)
+- SMS permission flow (`permission_handler`)
+- SMS ingestion service (`sms_advanced`)
+- Parsing logic for amount / merchant / transaction type
+- Basic category mapping (Food / Travel / Shopping / Others)
+- Dashboard, Transactions, and Insights screens
 
 ---
 
-## 🧱 Tech Stack
+## 🧱 Architecture
 
-* **Flutter** – UI framework
-* **Dart** – Programming language
-* **Hive / Sqflite** – Local database
-* **SMS Plugins** – Read messages from device
-* **fl_chart** – Data visualization
+### Flutter Layer
+- `lib/main.dart` – app shell, navigation, permission UX
+- `lib/screens/*` – dashboard, transaction list, insights
+- `lib/services/sms_service.dart` – reads SMS + calls parser
+- `lib/services/sms_parser.dart` – regex extraction + categorization
+- `lib/models/expense_transaction.dart` – normalized transaction model
+
+### Android Layer (required)
+Because SMS access is Android-only, add SMS permissions in Android manifest and request runtime permission from Flutter.
 
 ---
 
-## 🔐 Permissions Required
+## 🔐 Permissions
 
-The app requires SMS permissions to function:
+Add these in `android/app/src/main/AndroidManifest.xml`:
 
 ```xml
 <uses-permission android:name="android.permission.READ_SMS"/>
 <uses-permission android:name="android.permission.RECEIVE_SMS"/>
 ```
 
-### 📢 Why this permission?
+The app shows this user-facing message before requesting permission:
 
-We use SMS access **only to detect financial transactions automatically**.
-No personal data is shared or sent outside your device.
-
----
-
-## 📦 Installation
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/your-username/sms-expense-tracker.git
-cd sms-expense-tracker
-```
-
-2. Install dependencies:
-
-```bash
-flutter pub get
-```
-
-3. Run the app:
-
-```bash
-flutter run
-```
+> "We read SMS only to detect your expenses automatically. No data is shared."
 
 ---
 
-## 📂 Project Structure
+## 📩 SMS Parsing Rules
 
-```
-lib/
-│── main.dart
-│── screens/
-│   ├── dashboard.dart
-│   ├── transactions.dart
-│── services/
-│   ├── sms_reader.dart
-│   ├── parser.dart
-│── models/
-│   ├── transaction.dart
-│── database/
-│   ├── db_service.dart
-```
+Sample supported message:
 
----
+`Rs 500 debited from A/C at Swiggy on 12-Apr`
 
-## 🧠 How It Works
+Extracted fields:
+- amount → 500
+- merchant → Swiggy
+- type → Debit
+- category → Food
 
-1. App requests SMS permission
-2. Reads incoming & existing messages
-3. Filters relevant messages (bank alerts)
-4. Extracts:
-
-   * Amount 💰
-   * Merchant 🏪
-   * Date 📅
-5. Stores data locally
-6. Displays insights on dashboard
+Regex strategy:
+- amount pattern supports `Rs`, `INR`, or `₹`
+- merchant extracted from `at/to/towards/from ...`
 
 ---
 
-## 📊 Example SMS Parsing
+## 🗂️ Category Mapping
 
-**Input SMS:**
+- Swiggy / Zomato → Food
+- Uber / Ola → Travel
+- Amazon / Flipkart → Shopping
+- fallback → Others
 
-```
-Rs 500 debited from A/C at Swiggy on 12-Apr
-```
+---
 
-**Parsed Output:**
+## 💾 Storage (next step)
+
+Recommended for Phase 2:
+- Hive (simple + fast)
+- or sqflite (SQL flexibility)
+
+Persist:
 
 ```json
 {
   "amount": 500,
   "merchant": "Swiggy",
   "category": "Food",
-  "type": "Debit"
+  "date": "2026-04-21"
 }
 ```
 
 ---
 
+## 📊 Build Phases
+
+### Phase 1 (MVP)
+- [x] Basic Flutter app skeleton
+- [x] SMS permission screen
+- [x] Read SMS and parse expenses
+- [x] Show parsed list
+
+### Phase 2
+- [ ] Persistent storage (Hive/sqflite)
+- [ ] Budget + summaries by period
+- [ ] Better parsing for more banks
+
+### Phase 3
+- [ ] Charts (`fl_chart`)
+- [ ] Budget alerts
+- [ ] Smarter categorization
+
+---
+
 ## ⚠️ Limitations
 
-* ❌ Works only on **Android** (iOS restricts SMS access)
-* ⚠️ SMS formats may vary across banks
-* 🔍 Parsing logic may need improvements for edge cases
-
----
-
-## 🔮 Future Enhancements
-
-* Budget tracking & alerts
-* Subscription detection
-* AI-based categorization
-* Cloud sync (optional)
-* Multi-bank intelligent parsing
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome!
-
-1. Fork the repo
-2. Create your feature branch
-3. Commit your changes
-4. Submit a pull request
-
----
-
-## 📜 License
-
-This project is licensed under the MIT License.
-
----
-
-## 👨‍💻 Author
-
-Developed by **Rohan Singh**
-
----
-
-## 💡 Disclaimer
-
-This app accesses SMS data **only for expense tracking purposes**.
-All data remains on the user's device and is not shared externally.
+- iOS cannot provide SMS inbox reading for this use-case.
+- Works on Android devices only.
+- Bank SMS formats vary; parser will need iterative hardening.
