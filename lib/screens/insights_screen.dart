@@ -12,8 +12,11 @@ class InsightsScreen extends StatelessWidget {
     final byCategory = <String, double>{};
 
     for (final tx in transactions) {
-      byCategory.update(tx.category, (value) => value + tx.amount,
-          ifAbsent: () => tx.amount);
+      byCategory.update(
+        tx.category,
+        (value) => value + tx.amount,
+        ifAbsent: () => tx.amount,
+      );
     }
 
     final tiles = byCategory.entries.toList()
@@ -27,11 +30,13 @@ class InsightsScreen extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         const SizedBox(height: 8),
+        if (tiles.isEmpty)
+          const Text('No category insights yet. Add or import transactions.'),
         ...tiles.map(
           (entry) => Card(
             child: ListTile(
               title: Text(entry.key),
-              trailing: Text('₹${entry.value.toStringAsFixed(2)}'),
+              trailing: Text('\u20B9${entry.value.toStringAsFixed(2)}'),
             ),
           ),
         ),

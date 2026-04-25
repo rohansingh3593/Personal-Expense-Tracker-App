@@ -4,10 +4,17 @@ Android-first app that reads bank SMS alerts, extracts expenses, and shows daily
 
 ## ✅ Current MVP Scaffold Included
 
+<<<<<<< ours
 This repository now includes a starter Flutter structure with:
 
 - SMS permission flow (`permission_handler`)
 - SMS ingestion service (`sms_advanced`)
+=======
+This repository includes a starter Flutter structure with:
+
+- SMS permission flow (`permission_handler`)
+- SMS inbox ingestion (`telephony`)
+>>>>>>> theirs
 - Parsing logic for amount / merchant / transaction type
 - Basic category mapping (Food / Travel / Shopping / Others)
 - Dashboard, Transactions, and Insights screens
@@ -15,6 +22,7 @@ This repository now includes a starter Flutter structure with:
 ---
 
 ## 🧱 Architecture
+<<<<<<< ours
 
 ### Flutter Layer
 - `lib/main.dart` – app shell, navigation, permission UX
@@ -31,12 +39,28 @@ Because SMS access is Android-only, add SMS permissions in Android manifest and 
 ## 🔐 Permissions
 
 Add these in `android/app/src/main/AndroidManifest.xml`:
+=======
+
+### Flutter Layer
+- `lib/main.dart` – app shell, navigation, permission UX
+- `lib/screens/*` – dashboard, transaction list, insights
+- `lib/services/sms_service.dart` – runtime permission + inbox read
+- `lib/services/sms_parser.dart` – regex extraction + categorization
+- `lib/models/expense_transaction.dart` – normalized transaction model
+
+---
+
+## 🔐 Permissions (Android)
+
+Add these to `android/app/src/main/AndroidManifest.xml`:
+>>>>>>> theirs
 
 ```xml
 <uses-permission android:name="android.permission.READ_SMS"/>
 <uses-permission android:name="android.permission.RECEIVE_SMS"/>
 ```
 
+<<<<<<< ours
 The app shows this user-facing message before requesting permission:
 
 > "We read SMS only to detect your expenses automatically. No data is shared."
@@ -46,9 +70,15 @@ The app shows this user-facing message before requesting permission:
 ## 📩 SMS Parsing Rules
 
 Sample supported message:
+=======
+The app shows this message before prompting:
+
+> "We read SMS only to detect your expenses automatically. No data is shared."
+>>>>>>> theirs
 
 `Rs 500 debited from A/C at Swiggy on 12-Apr`
 
+<<<<<<< ours
 Extracted fields:
 - amount → 500
 - merchant → Swiggy
@@ -58,9 +88,15 @@ Extracted fields:
 Regex strategy:
 - amount pattern supports `Rs`, `INR`, or `₹`
 - merchant extracted from `at/to/towards/from ...`
+=======
+## 📩 SMS Parsing Rules
 
----
+Example input:
+>>>>>>> theirs
 
+`Rs 500 debited from A/C at Swiggy on 12-Apr`
+
+<<<<<<< ours
 ## 🗂️ Category Mapping
 
 - Swiggy / Zomato → Food
@@ -109,6 +145,40 @@ Persist:
 
 ---
 
+=======
+Extracted fields:
+- amount → 500
+- merchant → Swiggy
+- type → Debit
+- category → Food
+
+Regex strategy:
+- amount supports `Rs`, `INR`, or `₹`
+- merchant extracted from patterns like `at/to/towards/from ...`
+
+---
+
+## ⚙️ Build Checklist (important)
+
+If release build says APK is missing, verify these in your Flutter project:
+
+1. This repository is copied into a **real Flutter app scaffold** (`android/`, `ios/`, `wgit eb/` folders exist). If not, run:
+   ```bash
+   flutter create .
+   ```
+2. Android permissions are present in `AndroidManifest.xml`.
+3. Run a clean build:
+   ```bash
+   flutter clean
+   flutter pub get
+   flutter build apk --release -v
+   ```
+4. Expected output APK path:
+   - `build/app/outputs/flutter-apk/app-release.apk`
+
+---
+
+>>>>>>> theirs
 ## ⚠️ Limitations
 
 - iOS cannot provide SMS inbox reading for this use-case.

@@ -34,6 +34,12 @@ class DashboardScreen extends StatelessWidget {
         _MetricCard(title: 'Spent Today', value: spentToday),
         _MetricCard(title: 'Spent This Week', value: spentThisWeek),
         _MetricCard(title: 'Spent This Month', value: spentThisMonth),
+        if (transactions.isEmpty) ...[
+          const SizedBox(height: 12),
+          const Text(
+            'No transactions yet. Grant SMS access to auto-import bank alerts.',
+          ),
+        ],
       ],
     );
   }
@@ -50,7 +56,7 @@ class _MetricCard extends StatelessWidget {
     return Card(
       child: ListTile(
         title: Text(title),
-        subtitle: Text('₹${value.toStringAsFixed(2)}'),
+        subtitle: Text('\u20B9${value.toStringAsFixed(2)}'),
       ),
     );
   }

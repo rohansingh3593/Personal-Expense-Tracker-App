@@ -11,7 +11,10 @@ class TransactionsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (transactions.isEmpty) {
       return const Center(
-        child: Text('No expenses found yet. Tap refresh after granting SMS access.'),
+        child: Text(
+          'No expenses found yet. Grant SMS permission to auto-read transactions.',
+          textAlign: TextAlign.center,
+        ),
       );
     }
 
@@ -23,8 +26,21 @@ class TransactionsScreen extends StatelessWidget {
         return ListTile(
           leading: CircleAvatar(child: Text(tx.category.characters.first)),
           title: Text(tx.merchant),
-          subtitle: Text('${tx.category} • ${tx.date.toLocal()}'),
-          trailing: Text('₹${tx.amount.toStringAsFixed(2)}'),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${tx.category} - ${tx.date.toLocal()}'),
+              const SizedBox(height: 4),
+              Text(
+                tx.rawMessage,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          trailing: Text('\u20B9${tx.amount.toStringAsFixed(2)}'),
+          isThreeLine: true,
         );
       },
     );

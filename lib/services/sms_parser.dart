@@ -2,14 +2,14 @@ import '../models/expense_transaction.dart';
 
 class SmsParser {
   static final RegExp _amountRegex =
-      RegExp(r'(?:rs\.?|inr|₹)\s?([\d,]+(?:\.\d{1,2})?)', caseSensitive: false);
+      RegExp(r'(?:rs\.?|inr|\u20B9)\s?([\d,]+(?:\.\d{1,2})?)', caseSensitive: false);
   static final RegExp _merchantRegex = RegExp(
     r'(?:at|to|towards|from)\s+([A-Za-z0-9 .&_-]{2,})',
     caseSensitive: false,
   );
 
   ExpenseTransaction? parse(String body, DateTime smsDate) {
-    if (!_looksLikeTransaction(body)) return null;
+    if (!looksLikeTransaction(body)) return null;
 
     final amountMatch = _amountRegex.firstMatch(body);
     if (amountMatch == null) return null;
@@ -21,20 +21,35 @@ class SmsParser {
     final merchantMatch = _merchantRegex.firstMatch(body);
     final merchant = _sanitizeMerchant(merchantMatch?.group(1) ?? 'Unknown');
 
-    final transactionType = _detectType(body);
-    final category = _categorizeMerchant(merchant);
-
     return ExpenseTransaction(
       amount: amount,
       merchant: merchant,
-      category: category,
-      type: transactionType,
+      category: _categorizeMerchant(merchant),
+      type: detectType(body),
       date: smsDate,
       rawMessage: body,
     );
   }
 
-  bool _looksLikeTransaction(String body) {
+  ExpenseTransaction createFromManualAmount({
+    required String body,
+    required DateTime smsDate,
+    required double amount,
+  }) {
+    final merchantMatch = _merchantRegex.firstMatch(body);
+    final merchant = _sanitizeMerchant(merchantMatch?.group(1) ?? 'Unknown');
+
+    return ExpenseTransaction(
+      amount: amount,
+      merchant: merchant,
+      category: _categorizeMerchant(merchant),
+      type: detectType(body),
+      date: smsDate,
+      rawMessage: body,
+    );
+  }
+
+  bool looksLikeTransaction(String body) {
     final lower = body.toLowerCase();
     return lower.contains('debited') ||
         lower.contains('spent') ||
@@ -42,7 +57,7 @@ class SmsParser {
         lower.contains('txn');
   }
 
-  String _detectType(String body) {
+  String detectType(String body) {
     final lower = body.toLowerCase();
     if (lower.contains('credited')) return 'Credit';
     return 'Debit';
