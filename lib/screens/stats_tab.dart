@@ -25,25 +25,26 @@ class _StatsTabState extends State<StatsTab> {
     final now = DateTime.now();
     final range = _resolveRange(now);
     final txInRange = widget.transactions
-        .where((t) => t.type == 'Debit' || t.type == 'Paid' || t.type == 'paid')
+        .where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))
         .where((t) => !t.date.isBefore(range.start) && !t.date.isAfter(range.end))
         .toList();
 
     final categorySpend = <String, double>{};
     for (final tx in txInRange) {
-      categorySpend.update(tx.category, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
+      categorySpend.update(tx.category, (v) => v + signed, ifAbsent: () => signed);
     }
     final lendingOwes = _lendingRemaining(txInRange);
-    final total = txInRange.fold<double>(0, (s, t) => s + t.amount);
+    final total = txInRange.fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
 
     final prevRange = DateTimeRange(
       start: range.start.subtract(range.duration),
       end: range.start,
     );
     final prevTotal = widget.transactions
-        .where((t) => t.type == 'Debit' || t.type == 'Paid' || t.type == 'paid')
+        .where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))
         .where((t) => !t.date.isBefore(prevRange.start) && t.date.isBefore(prevRange.end))
-        .fold<double>(0, (s, t) => s + t.amount);
+        .fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
 
     final diffPct = prevTotal <= 0 ? null : ((total - prevTotal) / prevTotal) * 100;
 
@@ -192,9 +193,10 @@ class _StatsTabState extends State<StatsTab> {
 
   Map<String, double> _monthTrend(List<ExpenseTransaction> transactions) {
     final result = <String, double>{};
-    for (final tx in transactions.where((t) => t.type == 'Debit' || t.type == 'Paid' || t.type == 'paid')) {
+    for (final tx in transactions.where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))) {
       final key = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}';
-      result.update(key, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
+      result.update(key, (v) => v + signed, ifAbsent: () => signed);
     }
     return result;
   }
@@ -218,6 +220,12 @@ class _StatsTabState extends State<StatsTab> {
     return result;
   }
 }
+
+bool _isOutgoingType(String type) =>
+    type == 'Debit' || type == 'Paid' || type == 'paid';
+
+bool _isIncomingType(String type) =>
+    type == 'Credit' || type == 'Received' || type == 'received';
 
 class _PieChartCard extends StatelessWidget {
   const _PieChartCard({required this.data});

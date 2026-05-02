@@ -76,7 +76,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
   List<ExpenseTransaction> _selectedMonthTx() {
     return widget.transactions
-        .where((t) => t.type == 'Debit')
+        .where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))
         .where((t) => t.date.year == _selectedMonth.year && t.date.month == _selectedMonth.month)
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
@@ -103,13 +103,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
           currentMonthTx: _selectedMonthTx(),
           previousMonthTx: widget.transactions.where((t) {
             final prev = DateTime(_selectedMonth.year, _selectedMonth.month - 1);
-            return t.type == 'Debit' && t.date.year == prev.year && t.date.month == prev.month;
+            return (_isOutgoingType(t.type) || _isIncomingType(t.type)) && t.date.year == prev.year && t.date.month == prev.month;
           }).toList(),
           budgets: widget.budgets,
         );
       case TransactionViewMode.yearly:
         return _YearlyAllTimeView(
-          transactions: widget.transactions.where((t) => t.type == 'Debit').toList(),
+          transactions: widget.transactions.where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type)).toList(),
         );
     }
   }
@@ -230,7 +230,10 @@ class _DailyListView extends StatelessWidget {
                               ],
                             ),
                           ),
-                          Text('\u20B9${tx.amount.toStringAsFixed(2)}'),
+                          Text(
+                            '${_isIncomingType(tx.type) ? '+' : '-'}\u20B9${tx.amount.toStringAsFixed(2)}',
+                            style: TextStyle(color: _isIncomingType(tx.type) ? Colors.green : Colors.red),
+                          ),
                         ],
                       ),
                     ),
@@ -262,7 +265,8 @@ class _CalendarView extends StatelessWidget {
   Widget build(BuildContext context) {
     final daySpend = <int, double>{};
     for (final tx in transactions) {
-      daySpend.update(tx.date.day, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
+      daySpend.update(tx.date.day, (v) => v + signed, ifAbsent: () => signed);
     }
 
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
@@ -325,7 +329,7 @@ class _CalendarView extends StatelessWidget {
               dense: true,
               title: Text(tx.merchant),
               subtitle: Text(_formatTime(tx.date)),
-              trailing: Text('\u20B9${tx.amount.toStringAsFixed(2)}'),
+              trailing: Text('${_isIncomingType(tx.type) ? '+' : '-'}\u20B9${tx.amount.toStringAsFixed(2)}'),
             ),
           ),
         ],
@@ -347,12 +351,13 @@ class _MonthlySummaryView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = currentMonthTx.fold<double>(0, (s, t) => s + t.amount);
-    final prevTotal = previousMonthTx.fold<double>(0, (s, t) => s + t.amount);
+    final total = currentMonthTx.fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
+    final prevTotal = previousMonthTx.fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
 
     final categorySpend = <String, double>{};
     for (final tx in currentMonthTx) {
-      categorySpend.update(tx.category, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
+      categorySpend.update(tx.category, (v) => v + signed, ifAbsent: () => signed);
     }
     final entries = categorySpend.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
@@ -427,9 +432,10 @@ class _YearlyAllTimeView extends StatelessWidget {
     final yearly = <int, double>{};
     final monthly = <String, double>{};
     for (final tx in transactions) {
-      yearly.update(tx.date.year, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
+      yearly.update(tx.date.year, (v) => v + signed, ifAbsent: () => signed);
       final key = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}';
-      monthly.update(key, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      monthly.update(key, (v) => v + signed, ifAbsent: () => signed);
     }
 
     final yearEntries = yearly.entries.toList()..sort((a, b) => b.key.compareTo(a.key));
@@ -484,3 +490,9 @@ String _formatTime(DateTime dt) {
   final ampm = dt.hour >= 12 ? 'PM' : 'AM';
   return '${hour.toString().padLeft(2, '0')}:$mm $ampm';
 }
+
+bool _isOutgoingType(String type) =>
+    type == 'Debit' || type == 'Paid' || type == 'paid';
+
+bool _isIncomingType(String type) =>
+    type == 'Credit' || type == 'Received' || type == 'received';
