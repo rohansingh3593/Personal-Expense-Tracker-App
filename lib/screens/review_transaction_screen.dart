@@ -28,7 +28,7 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
 
   late DateTime _dateTime;
   late String _type;
-  String _lendingFlow = 'Paid';
+  String _lendingFlow = 'paid';
   late String _account;
   late String _category;
   String? _subcategory;
@@ -147,16 +147,16 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
               child: Column(
                 children: [
                   RadioListTile<String>(
-                    value: 'Paid',
+                    value: 'paid',
                     groupValue: _lendingFlow,
                     title: const Text('Paid (You gave money)'),
-                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'Paid'),
+                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'paid'),
                   ),
                   RadioListTile<String>(
-                    value: 'Received',
+                    value: 'received',
                     groupValue: _lendingFlow,
                     title: const Text('Received (You got money back)'),
-                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'Paid'),
+                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'paid'),
                   ),
                 ],
               ),

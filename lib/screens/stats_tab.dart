@@ -25,7 +25,7 @@ class _StatsTabState extends State<StatsTab> {
     final now = DateTime.now();
     final range = _resolveRange(now);
     final txInRange = widget.transactions
-        .where((t) => t.type == 'Debit' || t.type == 'Paid')
+        .where((t) => t.type == 'Debit' || t.type == 'Paid' || t.type == 'paid')
         .where((t) => !t.date.isBefore(range.start) && !t.date.isAfter(range.end))
         .toList();
 
@@ -41,7 +41,7 @@ class _StatsTabState extends State<StatsTab> {
       end: range.start,
     );
     final prevTotal = widget.transactions
-        .where((t) => t.type == 'Debit' || t.type == 'Paid')
+        .where((t) => t.type == 'Debit' || t.type == 'Paid' || t.type == 'paid')
         .where((t) => !t.date.isBefore(prevRange.start) && t.date.isBefore(prevRange.end))
         .fold<double>(0, (s, t) => s + t.amount);
 
@@ -192,7 +192,7 @@ class _StatsTabState extends State<StatsTab> {
 
   Map<String, double> _monthTrend(List<ExpenseTransaction> transactions) {
     final result = <String, double>{};
-    for (final tx in transactions.where((t) => t.type == 'Debit' || t.type == 'Paid')) {
+    for (final tx in transactions.where((t) => t.type == 'Debit' || t.type == 'Paid' || t.type == 'paid')) {
       final key = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}';
       result.update(key, (v) => v + tx.amount, ifAbsent: () => tx.amount);
     }
@@ -204,9 +204,9 @@ class _StatsTabState extends State<StatsTab> {
     final returned = <String, double>{};
     for (final tx in txInRange.where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim().isNotEmpty)) {
       final person = tx.subcategory!.trim();
-      if (tx.type == 'Debit' || tx.type == 'Paid') {
+      if (tx.type == 'Debit' || tx.type == 'Paid' || tx.type == 'paid') {
         given.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
-      } else if (tx.type == 'Credit' || tx.type == 'Received') {
+      } else if (tx.type == 'Credit' || tx.type == 'Received' || tx.type == 'received') {
         returned.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
       }
     }
@@ -393,9 +393,9 @@ class _LendingPersonDetail extends StatelessWidget {
     var paid = 0.0;
     var received = 0.0;
     for (final tx in items) {
-      if (tx.type == 'Paid' || tx.type == 'Debit') {
+      if (tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit') {
         paid += tx.amount;
-      } else if (tx.type == 'Received' || tx.type == 'Credit') {
+      } else if (tx.type == 'Received' || tx.type == 'received' || tx.type == 'Credit') {
         received += tx.amount;
       }
     }
@@ -410,7 +410,7 @@ class _LendingPersonDetail extends StatelessWidget {
         Text('Pending: ₹${pending.toStringAsFixed(0)}'),
         const SizedBox(height: 6),
         ...items.map((tx) {
-          final isPaid = tx.type == 'Paid' || tx.type == 'Debit';
+          final isPaid = tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit';
           final label = isPaid ? 'Paid' : 'Received';
           return ListTile(
             dense: true,

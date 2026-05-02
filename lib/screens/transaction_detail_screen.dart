@@ -23,7 +23,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   bool _isEditing = true;
 
   late String _type;
-  String _lendingFlow = 'Paid';
+  String _lendingFlow = 'paid';
   late DateTime _dateTime;
   late final TextEditingController _amountController;
   late final TextEditingController _merchantController;
@@ -39,7 +39,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     super.initState();
     final t = widget.transaction;
     _type = t.type;
-    _lendingFlow = t.type == 'Received' || t.type == 'Credit' ? 'Received' : 'Paid';
+    _lendingFlow = t.type == 'Received' || t.type == 'Credit' || t.type == 'received' ? 'received' : 'paid';
     _dateTime = t.date;
     _amountController = TextEditingController(text: t.amount.toStringAsFixed(2));
     _merchantController = TextEditingController(text: t.merchant);
@@ -162,16 +162,16 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
               child: Column(
                 children: [
                   RadioListTile<String>(
-                    value: 'Paid',
+                    value: 'paid',
                     groupValue: _lendingFlow,
                     title: const Text('Paid (You gave money)'),
-                    onChanged: _isEditing ? (v) => setState(() => _lendingFlow = v ?? 'Paid') : null,
+                    onChanged: _isEditing ? (v) => setState(() => _lendingFlow = v ?? 'paid') : null,
                   ),
                   RadioListTile<String>(
-                    value: 'Received',
+                    value: 'received',
                     groupValue: _lendingFlow,
                     title: const Text('Received (You got money back)'),
-                    onChanged: _isEditing ? (v) => setState(() => _lendingFlow = v ?? 'Paid') : null,
+                    onChanged: _isEditing ? (v) => setState(() => _lendingFlow = v ?? 'paid') : null,
                   ),
                 ],
               ),

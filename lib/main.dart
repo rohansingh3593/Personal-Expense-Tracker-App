@@ -371,11 +371,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddTransactionFlow,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Transaction'),
-      ),
+      floatingActionButton: _tabIndex == 0
+          ? FloatingActionButton.extended(
+              onPressed: _openAddTransactionFlow,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Transaction'),
+            )
+          : null,
       body: _loading || !_dataLoaded
           ? const Center(child: CircularProgressIndicator())
           : !_permissionGranted && !_limitedMode
