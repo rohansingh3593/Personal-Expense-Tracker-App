@@ -95,12 +95,14 @@ class AppData {
         'Beauty',
         'Shopping',
         'Travel',
+        'Lending',
       ],
       subcategories: const {
         'Food': ['Lunch', 'Dinner', 'Eating Out', 'Beverages', 'Online', 'Fruits'],
         'Transport': ['Fuel', 'Cab', 'Bus'],
         'Shopping': ['Online', 'Offline'],
         'Travel': ['Train', 'Flight', 'Hotel'],
+        'Lending': [],
       },
       budgets: const {
         'Food': 5000,

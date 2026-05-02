@@ -31,6 +31,7 @@ class _StatsTabState extends State<StatsTab> {
     for (final tx in txInRange) {
       categorySpend.update(tx.category, (v) => v + tx.amount, ifAbsent: () => tx.amount);
     }
+    final lendingOwes = _lendingRemaining(txInRange);
     final total = txInRange.fold<double>(0, (s, t) => s + t.amount);
 
     final prevRange = DateTimeRange(
@@ -122,6 +123,17 @@ class _StatsTabState extends State<StatsTab> {
           );
         }),
         const SizedBox(height: 10),
+        if (lendingOwes.isNotEmpty) ...[
+          const Text('Lending by Person (Remaining)', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          SizedBox(height: 220, child: _PieChartCard(data: lendingOwes)),
+          ...lendingOwes.entries.map((entry) => ListTile(
+                dense: true,
+                title: Text(entry.key),
+                trailing: Text('₹${entry.value.toStringAsFixed(0)}'),
+              )),
+          const SizedBox(height: 10),
+        ],
         const Text('Monthly Spending Trend', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         ..._monthTrend(widget.transactions).entries.toList().reversed.take(12).map(
@@ -154,6 +166,25 @@ class _StatsTabState extends State<StatsTab> {
     for (final tx in transactions.where((t) => t.type == 'Debit')) {
       final key = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}';
       result.update(key, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+    }
+    return result;
+  }
+
+  Map<String, double> _lendingRemaining(List<ExpenseTransaction> txInRange) {
+    final given = <String, double>{};
+    final returned = <String, double>{};
+    for (final tx in txInRange.where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim().isNotEmpty)) {
+      final person = tx.subcategory!.trim();
+      if (tx.type == 'Debit') {
+        given.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      } else if (tx.type == 'Credit') {
+        returned.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      }
+    }
+    final result = <String, double>{};
+    for (final person in {...given.keys, ...returned.keys}) {
+      final remaining = (given[person] ?? 0) - (returned[person] ?? 0);
+      if (remaining > 0) result[person] = remaining;
     }
     return result;
   }
