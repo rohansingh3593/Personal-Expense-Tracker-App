@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/expense_transaction.dart';
+import '../utils/text_format.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
@@ -114,7 +115,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       subcategory: _subcategory,
       amount: amount,
       note: _noteController.text.trim(),
-      merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : _merchantController.text.trim(),
+      merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : toTitleCase(_merchantController.text.trim()),
       description: _descriptionController.text.trim(),
       isBookmarked: _bookmarked,
     );

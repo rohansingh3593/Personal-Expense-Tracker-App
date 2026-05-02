@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/text_format.dart';
 
 class MoreTab extends StatelessWidget {
   const MoreTab({
@@ -62,7 +63,7 @@ class MoreTab extends StatelessWidget {
             context,
             'expense',
             onAdd: (name) {
-              final updated = [...expenseCategories, _toTitleCase(name)];
+              final updated = [...expenseCategories, toTitleCase(name)];
               onUpdateExpenseCategories(updated);
             },
           ),
@@ -426,7 +427,7 @@ Future<void> _addCategoryDialog(
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
-              final value = _toTitleCase(controller.text.trim());
+              final value = toTitleCase(controller.text.trim());
               if (value.isNotEmpty) onAdd(value);
               Navigator.pop(context);
             },
@@ -456,7 +457,7 @@ Future<void> _addSubcategoryDialog(
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
           onPressed: () {
-            final value = _toTitleCase(controller.text.trim());
+            final value = toTitleCase(controller.text.trim());
             if (value.isNotEmpty) onAdd(value);
             Navigator.pop(context);
           },
@@ -465,15 +466,6 @@ Future<void> _addSubcategoryDialog(
       ],
     ),
   );
-}
-
-String _toTitleCase(String raw) {
-  final words = raw
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((word) => word.isNotEmpty)
-      .map((word) => '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}');
-  return words.join(' ');
 }
 
 Future<void> _setBudgetDialog(

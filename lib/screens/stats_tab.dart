@@ -17,6 +17,7 @@ class StatsTab extends StatefulWidget {
 class _StatsTabState extends State<StatsTab> {
   StatsRange _range = StatsRange.monthly;
   DateTimeRange? _customRange;
+  String? _selectedCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -103,25 +104,50 @@ class _StatsTabState extends State<StatsTab> {
         if (categorySpend.isNotEmpty) const SizedBox(height: 8),
         ...categorySpend.entries.map((entry) {
           final double pct = total <= 0 ? 0.0 : entry.value / total;
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: Text(entry.key)),
-                      Text('\u20B9${entry.value.toStringAsFixed(0)} (${(pct * 100).toStringAsFixed(0)}%)'),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  LinearProgressIndicator(value: pct),
-                ],
+          return InkWell(
+            onTap: () => setState(() => _selectedCategory = entry.key),
+            child: Card(
+              color: _selectedCategory == entry.key ? Theme.of(context).colorScheme.surfaceVariant : null,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(entry.key)),
+                        Text('\u20B9${entry.value.toStringAsFixed(0)} (${(pct * 100).toStringAsFixed(0)}%)'),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(value: pct),
+                  ],
+                ),
               ),
             ),
           );
         }),
+        if (_selectedCategory != null) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${_selectedCategory!} Subcategories',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(() => _selectedCategory = null),
+                child: const Text('Back'),
+              ),
+            ],
+          ),
+          _SubcategoryBreakdown(
+            category: _selectedCategory!,
+            transactions: txInRange,
+          ),
+        ],
         const SizedBox(height: 10),
         if (lendingOwes.isNotEmpty) ...[
           const Text('Lending by Person (Remaining)', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -300,4 +326,39 @@ class _PieChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PieChartPainter oldDelegate) =>
       oldDelegate.values != values || oldDelegate.colors != colors || oldDelegate.borderColor != borderColor;
+}
+
+class _SubcategoryBreakdown extends StatelessWidget {
+  const _SubcategoryBreakdown({required this.category, required this.transactions});
+
+  final String category;
+  final List<ExpenseTransaction> transactions;
+
+  @override
+  Widget build(BuildContext context) {
+    final grouped = <String, double>{};
+    for (final tx in transactions.where((t) => t.category == category)) {
+      final sub = (tx.subcategory ?? 'Uncategorized').trim().isEmpty ? 'Uncategorized' : tx.subcategory!.trim();
+      grouped.update(sub, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+    }
+    final total = grouped.values.fold<double>(0, (a, b) => a + b);
+    final sorted = grouped.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    if (sorted.isEmpty) return const Text('No subcategory data.');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Total: ₹${total.toStringAsFixed(0)}'),
+        const SizedBox(height: 6),
+        SizedBox(height: 220, child: _PieChartCard(data: grouped)),
+        ...sorted.map((entry) {
+          final pct = total <= 0 ? 0 : (entry.value / total) * 100;
+          return ListTile(
+            dense: true,
+            title: Text(entry.key),
+            trailing: Text('₹${entry.value.toStringAsFixed(0)} (${pct.toStringAsFixed(0)}%)'),
+          );
+        }),
+      ],
+    );
+  }
 }

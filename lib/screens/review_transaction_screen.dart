@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/expense_transaction.dart';
 import '../services/sms_parser.dart';
+import '../utils/text_format.dart';
 
 class ReviewTransactionScreen extends StatefulWidget {
   const ReviewTransactionScreen({
@@ -107,7 +108,7 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
       id: '${DateTime.now().millisecondsSinceEpoch}-${_merchantController.text.hashCode}',
       amount: amount,
       account: _account,
-      merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : _merchantController.text.trim(),
+      merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : toTitleCase(_merchantController.text.trim()),
       category: _category,
       subcategory: _subcategory,
       type: _type,

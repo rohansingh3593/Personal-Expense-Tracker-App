@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/expense_transaction.dart';
+import '../utils/text_format.dart';
 
 class ManualAddTransactionScreen extends StatefulWidget {
   const ManualAddTransactionScreen({
@@ -98,7 +99,7 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
       id: '${DateTime.now().millisecondsSinceEpoch}-${_merchantController.text.hashCode}',
       amount: amount,
       account: _account,
-      merchant: _merchantController.text.trim().isEmpty ? 'Manual' : _merchantController.text.trim(),
+      merchant: _merchantController.text.trim().isEmpty ? 'Manual' : toTitleCase(_merchantController.text.trim()),
       category: _category,
       subcategory: _subcategory,
       type: _type,
