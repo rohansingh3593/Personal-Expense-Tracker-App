@@ -18,13 +18,14 @@ class _StatsTabState extends State<StatsTab> {
   StatsRange _range = StatsRange.monthly;
   DateTimeRange? _customRange;
   String? _selectedCategory;
+  String? _selectedPerson;
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final range = _resolveRange(now);
     final txInRange = widget.transactions
-        .where((t) => t.type == 'Debit')
+        .where((t) => t.type == 'Debit' || t.type == 'Paid')
         .where((t) => !t.date.isBefore(range.start) && !t.date.isAfter(range.end))
         .toList();
 
@@ -40,7 +41,7 @@ class _StatsTabState extends State<StatsTab> {
       end: range.start,
     );
     final prevTotal = widget.transactions
-        .where((t) => t.type == 'Debit')
+        .where((t) => t.type == 'Debit' || t.type == 'Paid')
         .where((t) => !t.date.isBefore(prevRange.start) && t.date.isBefore(prevRange.end))
         .fold<double>(0, (s, t) => s + t.amount);
 
@@ -146,6 +147,8 @@ class _StatsTabState extends State<StatsTab> {
           _SubcategoryBreakdown(
             category: _selectedCategory!,
             transactions: txInRange,
+            selectedPerson: _selectedPerson,
+            onSelectPerson: (person) => setState(() => _selectedPerson = person),
           ),
         ],
         const SizedBox(height: 10),
@@ -189,7 +192,7 @@ class _StatsTabState extends State<StatsTab> {
 
   Map<String, double> _monthTrend(List<ExpenseTransaction> transactions) {
     final result = <String, double>{};
-    for (final tx in transactions.where((t) => t.type == 'Debit')) {
+    for (final tx in transactions.where((t) => t.type == 'Debit' || t.type == 'Paid')) {
       final key = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}';
       result.update(key, (v) => v + tx.amount, ifAbsent: () => tx.amount);
     }
@@ -201,9 +204,9 @@ class _StatsTabState extends State<StatsTab> {
     final returned = <String, double>{};
     for (final tx in txInRange.where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim().isNotEmpty)) {
       final person = tx.subcategory!.trim();
-      if (tx.type == 'Debit') {
+      if (tx.type == 'Debit' || tx.type == 'Paid') {
         given.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
-      } else if (tx.type == 'Credit') {
+      } else if (tx.type == 'Credit' || tx.type == 'Received') {
         returned.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
       }
     }
@@ -329,10 +332,17 @@ class _PieChartPainter extends CustomPainter {
 }
 
 class _SubcategoryBreakdown extends StatelessWidget {
-  const _SubcategoryBreakdown({required this.category, required this.transactions});
+  const _SubcategoryBreakdown({
+    required this.category,
+    required this.transactions,
+    required this.selectedPerson,
+    required this.onSelectPerson,
+  });
 
   final String category;
   final List<ExpenseTransaction> transactions;
+  final String? selectedPerson;
+  final ValueChanged<String> onSelectPerson;
 
   @override
   Widget build(BuildContext context) {
@@ -356,6 +366,56 @@ class _SubcategoryBreakdown extends StatelessWidget {
             dense: true,
             title: Text(entry.key),
             trailing: Text('₹${entry.value.toStringAsFixed(0)} (${pct.toStringAsFixed(0)}%)'),
+            onTap: category == 'Lending' ? () => onSelectPerson(entry.key) : null,
+          );
+        }),
+        if (category == 'Lending' && selectedPerson != null)
+          _LendingPersonDetail(
+            person: selectedPerson!,
+            transactions: transactions,
+          ),
+      ],
+    );
+  }
+}
+
+class _LendingPersonDetail extends StatelessWidget {
+  const _LendingPersonDetail({required this.person, required this.transactions});
+  final String person;
+  final List<ExpenseTransaction> transactions;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = transactions
+        .where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim() == person)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    var paid = 0.0;
+    var received = 0.0;
+    for (final tx in items) {
+      if (tx.type == 'Paid' || tx.type == 'Debit') {
+        paid += tx.amount;
+      } else if (tx.type == 'Received' || tx.type == 'Credit') {
+        received += tx.amount;
+      }
+    }
+    final pending = paid - received;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Text(person, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text('Total Paid: ₹${paid.toStringAsFixed(0)}'),
+        Text('Total Received: ₹${received.toStringAsFixed(0)}'),
+        Text('Pending: ₹${pending.toStringAsFixed(0)}'),
+        const SizedBox(height: 6),
+        ...items.map((tx) {
+          final isPaid = tx.type == 'Paid' || tx.type == 'Debit';
+          final label = isPaid ? 'Paid' : 'Received';
+          return ListTile(
+            dense: true,
+            title: Text('${tx.date.day}/${tx.date.month}/${tx.date.year} → $label ₹${tx.amount.toStringAsFixed(0)}'),
+            titleTextStyle: TextStyle(color: isPaid ? Colors.red : Colors.green),
           );
         }),
       ],

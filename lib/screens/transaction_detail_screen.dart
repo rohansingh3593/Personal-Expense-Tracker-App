@@ -23,6 +23,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   bool _isEditing = true;
 
   late String _type;
+  String _lendingFlow = 'Paid';
   late DateTime _dateTime;
   late final TextEditingController _amountController;
   late final TextEditingController _merchantController;
@@ -38,6 +39,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     super.initState();
     final t = widget.transaction;
     _type = t.type;
+    _lendingFlow = t.type == 'Received' || t.type == 'Credit' ? 'Received' : 'Paid';
     _dateTime = t.date;
     _amountController = TextEditingController(text: t.amount.toStringAsFixed(2));
     _merchantController = TextEditingController(text: t.merchant);
@@ -108,7 +110,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       return;
     }
     final updated = widget.transaction.copyWith(
-      type: _type,
+      type: _category == 'Lending' ? _lendingFlow : _type,
       date: _dateTime,
       account: _account,
       category: _category,
@@ -155,6 +157,26 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 : null,
           ),
           const SizedBox(height: 10),
+          if (_category == 'Lending')
+            Card(
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    value: 'Paid',
+                    groupValue: _lendingFlow,
+                    title: const Text('Paid (You gave money)'),
+                    onChanged: _isEditing ? (v) => setState(() => _lendingFlow = v ?? 'Paid') : null,
+                  ),
+                  RadioListTile<String>(
+                    value: 'Received',
+                    groupValue: _lendingFlow,
+                    title: const Text('Received (You got money back)'),
+                    onChanged: _isEditing ? (v) => setState(() => _lendingFlow = v ?? 'Paid') : null,
+                  ),
+                ],
+              ),
+            ),
+          if (_category == 'Lending') const SizedBox(height: 10),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),

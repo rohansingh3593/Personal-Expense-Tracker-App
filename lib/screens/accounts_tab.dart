@@ -198,9 +198,9 @@ class AccountsTab extends StatelessWidget {
     for (final tx in transactions.where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim().isNotEmpty)) {
       final person = tx.subcategory!.trim();
       final current = map[person] ?? (0, 0);
-      if (tx.type == 'Debit') {
+      if (tx.type == 'Debit' || tx.type == 'Paid') {
         map[person] = (current.$1 + tx.amount, current.$2);
-      } else if (tx.type == 'Credit') {
+      } else if (tx.type == 'Credit' || tx.type == 'Received') {
         map[person] = (current.$1, current.$2 + tx.amount);
       }
     }

@@ -28,6 +28,7 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
 
   late DateTime _dateTime;
   late String _type;
+  String _lendingFlow = 'Paid';
   late String _account;
   late String _category;
   String? _subcategory;
@@ -111,7 +112,7 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
       merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : toTitleCase(_merchantController.text.trim()),
       category: _category,
       subcategory: _subcategory,
-      type: _type,
+      type: _category == 'Lending' ? _lendingFlow : _type,
       date: _dateTime,
       note: _noteController.text.trim(),
       description: _descriptionController.text.trim(),
@@ -141,6 +142,26 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
             onSelectionChanged: (value) => setState(() => _type = value.first),
           ),
           const SizedBox(height: 10),
+          if (_category == 'Lending')
+            Card(
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    value: 'Paid',
+                    groupValue: _lendingFlow,
+                    title: const Text('Paid (You gave money)'),
+                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'Paid'),
+                  ),
+                  RadioListTile<String>(
+                    value: 'Received',
+                    groupValue: _lendingFlow,
+                    title: const Text('Received (You got money back)'),
+                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'Paid'),
+                  ),
+                ],
+              ),
+            ),
+          if (_category == 'Lending') const SizedBox(height: 10),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
