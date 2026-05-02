@@ -34,6 +34,10 @@ class _StatsTabState extends State<StatsTab> {
       categorySpend.update(tx.category, (v) => v + signed, ifAbsent: () => signed);
     }
     final lendingOwes = _lendingRemaining(txInRange);
+    final spendingByAccount = <String, double>{};
+    for (final tx in txInRange.where((t) => _isOutgoingType(t.type))) {
+      spendingByAccount.update(tx.account, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+    }
     final total = txInRange.fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
 
     final prevRange = DateTimeRange(
@@ -161,6 +165,22 @@ class _StatsTabState extends State<StatsTab> {
                 trailing: Text('₹${entry.value.toStringAsFixed(0)}'),
                 onTap: () => _openPersonDetail(entry.key),
               )),
+          const SizedBox(height: 10),
+        ],
+        if (spendingByAccount.isNotEmpty) ...[
+          const Text('Spending by Account', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          SizedBox(height: 220, child: _PieChartCard(data: spendingByAccount)),
+          ...spendingByAccount.entries.map((entry) {
+            final pct = spendingByAccount.values.fold<double>(0, (a, b) => a + b) <= 0
+                ? 0
+                : (entry.value / spendingByAccount.values.fold<double>(0, (a, b) => a + b)) * 100;
+            return ListTile(
+              dense: true,
+              title: Text(entry.key),
+              trailing: Text('₹${entry.value.toStringAsFixed(0)} (${pct.toStringAsFixed(0)}%)'),
+            );
+          }),
           const SizedBox(height: 10),
         ],
         const Text('Monthly Spending Trend', style: TextStyle(fontWeight: FontWeight.bold)),

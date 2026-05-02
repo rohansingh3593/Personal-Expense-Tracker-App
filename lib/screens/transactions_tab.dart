@@ -16,6 +16,7 @@ class TransactionsTab extends StatefulWidget {
     required this.expenseCategories,
     required this.subcategories,
     required this.onTransactionUpdated,
+    required this.accounts,
   });
 
   final List<ExpenseTransaction> transactions;
@@ -24,6 +25,7 @@ class TransactionsTab extends StatefulWidget {
   final List<String> expenseCategories;
   final Map<String, List<String>> subcategories;
   final ValueChanged<ExpenseTransaction> onTransactionUpdated;
+  final List<String> accounts;
 
   @override
   State<TransactionsTab> createState() => _TransactionsTabState();
@@ -90,6 +92,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
           expenseCategories: widget.expenseCategories,
           subcategories: widget.subcategories,
           onTransactionUpdated: widget.onTransactionUpdated,
+          accounts: widget.accounts,
         );
       case TransactionViewMode.calendar:
         return _CalendarView(
@@ -162,12 +165,14 @@ class _DailyListView extends StatelessWidget {
     required this.expenseCategories,
     required this.subcategories,
     required this.onTransactionUpdated,
+    required this.accounts,
   });
 
   final List<ExpenseTransaction> transactions;
   final List<String> expenseCategories;
   final Map<String, List<String>> subcategories;
   final ValueChanged<ExpenseTransaction> onTransactionUpdated;
+  final List<String> accounts;
 
   @override
   Widget build(BuildContext context) {
@@ -207,6 +212,7 @@ class _DailyListView extends StatelessWidget {
                             transaction: tx,
                             expenseCategories: expenseCategories,
                             subcategories: subcategories,
+                            accounts: accounts,
                           ),
                         ),
                       );

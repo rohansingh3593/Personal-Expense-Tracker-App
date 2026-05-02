@@ -97,6 +97,20 @@ class _HomeScreenState extends State<HomeScreen> {
       _expenseCategories.where((category) => !_archivedExpenseCategories.contains(category)).toList();
   Map<String, List<String>> get _subcategories => _appData.subcategories;
   Map<String, double> get _budgets => _appData.budgets;
+  List<Map<String, dynamic>> get _accounts {
+    final raw = _appData.settings['accounts'] as List?;
+    if (raw == null || raw.isEmpty) {
+      return const [
+        {'id': 'cash', 'name': 'Cash', 'is_active': true},
+        {'id': 'bank', 'name': 'Bank', 'is_active': true},
+      ];
+    }
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+  List<String> get _activeAccountNames => _accounts
+      .where((a) => a['is_active'] == true)
+      .map((a) => a['name'].toString())
+      .toList();
   String get _themePalette => (_appData.settings['themePalette'] as String?) ?? 'blue';
 
   Future<void> _loadAppData() async {
@@ -322,6 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
             expenseCategories: _expenseCategories,
             archivedExpenseCategories: _archivedExpenseCategories,
             subcategories: _subcategories,
+            accounts: _activeAccountNames,
           ),
         ),
       );
@@ -332,6 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
             expenseCategories: _expenseCategories,
             archivedExpenseCategories: _archivedExpenseCategories,
             subcategories: _subcategories,
+            accounts: _activeAccountNames,
           ),
         ),
       );
@@ -411,6 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
           expenseCategories: _expenseCategories,
           subcategories: _subcategories,
           onTransactionUpdated: _updateTransaction,
+          accounts: _activeAccountNames,
         );
       case 1:
         return StatsTab(transactions: _transactions);
@@ -456,6 +473,13 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           selectedThemePalette: _themePalette,
           onThemeChanged: _updateThemePalette,
+          accounts: _accounts,
+          onUpdateAccounts: (accounts) {
+            final updatedSettings = Map<String, dynamic>.from(_appData.settings);
+            updatedSettings['accounts'] = accounts;
+            setState(() => _appData = _appData.copyWith(settings: updatedSettings));
+            _persistAppData();
+          },
         );
       default:
         return const SizedBox.shrink();

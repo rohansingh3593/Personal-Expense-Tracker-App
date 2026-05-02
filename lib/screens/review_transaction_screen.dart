@@ -10,11 +10,13 @@ class ReviewTransactionScreen extends StatefulWidget {
     required this.draft,
     required this.expenseCategories,
     required this.subcategories,
+    required this.accounts,
   });
 
   final ParsedSmsDraft draft;
   final List<String> expenseCategories;
   final Map<String, List<String>> subcategories;
+  final List<String> accounts;
 
   @override
   State<ReviewTransactionScreen> createState() => _ReviewTransactionScreenState();
@@ -45,7 +47,7 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
     _descriptionController = TextEditingController(text: widget.draft.rawMessage);
     _dateTime = widget.draft.date;
     _type = widget.draft.type.toLowerCase() == 'credit' ? 'Credit' : 'Debit';
-    _account = 'Cash';
+    _account = widget.accounts.isEmpty ? 'Cash' : widget.accounts.first;
     _bookmarked = false;
     _category = widget.expenseCategories.contains(widget.draft.category)
         ? widget.draft.category
@@ -196,10 +198,10 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             value: _account,
-            items: const ['Cash', 'Bank']
+            items: widget.accounts
                 .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                 .toList(),
-            onChanged: (v) => setState(() => _account = v ?? 'Cash'),
+            onChanged: (v) => setState(() => _account = v ?? _account),
             decoration: const InputDecoration(labelText: 'Account', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 10),

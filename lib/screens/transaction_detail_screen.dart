@@ -9,11 +9,13 @@ class TransactionDetailScreen extends StatefulWidget {
     required this.transaction,
     required this.expenseCategories,
     required this.subcategories,
+    required this.accounts,
   });
 
   final ExpenseTransaction transaction;
   final List<String> expenseCategories;
   final Map<String, List<String>> subcategories;
+  final List<String> accounts;
 
   @override
   State<TransactionDetailScreen> createState() => _TransactionDetailScreenState();
@@ -47,7 +49,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _descriptionController = TextEditingController(
       text: t.description.isEmpty ? t.rawMessage : t.description,
     );
-    _account = t.account;
+    _account = widget.accounts.contains(t.account)
+        ? t.account
+        : (widget.accounts.isEmpty ? t.account : widget.accounts.first);
     _category = widget.expenseCategories.contains(t.category)
         ? t.category
         : (widget.expenseCategories.isEmpty ? 'Others' : widget.expenseCategories.first);
@@ -212,8 +216,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           DropdownButtonFormField<String>(
             value: _account,
             decoration: const InputDecoration(labelText: 'Account', border: OutlineInputBorder()),
-            items: const ['Cash', 'Bank'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-            onChanged: _isEditing ? (v) => setState(() => _account = v ?? 'Cash') : null,
+            items: widget.accounts.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+            onChanged: _isEditing ? (v) => setState(() => _account = v ?? _account) : null,
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(

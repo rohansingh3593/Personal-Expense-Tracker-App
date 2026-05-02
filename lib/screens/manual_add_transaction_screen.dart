@@ -9,11 +9,13 @@ class ManualAddTransactionScreen extends StatefulWidget {
     required this.expenseCategories,
     required this.archivedExpenseCategories,
     required this.subcategories,
+    required this.accounts,
   });
 
   final List<String> expenseCategories;
   final Set<String> archivedExpenseCategories;
   final Map<String, List<String>> subcategories;
+  final List<String> accounts;
 
   @override
   State<ManualAddTransactionScreen> createState() => _ManualAddTransactionScreenState();
@@ -41,7 +43,7 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
     _descriptionController = TextEditingController();
     _dateTime = DateTime.now();
     _type = 'Debit';
-    _account = 'Cash';
+    _account = widget.accounts.isEmpty ? 'Cash' : widget.accounts.first;
     _bookmarked = false;
     final activeCategories = widget.expenseCategories
         .where((category) => !widget.archivedExpenseCategories.contains(category))
@@ -189,10 +191,10 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             value: _account,
-            items: const ['Cash', 'Bank']
+            items: widget.accounts
                 .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                 .toList(),
-            onChanged: (v) => setState(() => _account = v ?? 'Cash'),
+            onChanged: (v) => setState(() => _account = v ?? _account),
             decoration: const InputDecoration(labelText: 'Account', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 10),

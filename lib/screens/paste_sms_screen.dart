@@ -9,11 +9,13 @@ class PasteSmsScreen extends StatefulWidget {
     required this.expenseCategories,
     required this.archivedExpenseCategories,
     required this.subcategories,
+    required this.accounts,
   });
 
   final List<String> expenseCategories;
   final Set<String> archivedExpenseCategories;
   final Map<String, List<String>> subcategories;
+  final List<String> accounts;
 
   @override
   State<PasteSmsScreen> createState() => _PasteSmsScreenState();
@@ -59,6 +61,7 @@ class _PasteSmsScreenState extends State<PasteSmsScreen> {
               .where((category) => !widget.archivedExpenseCategories.contains(category))
               .toList(),
           subcategories: widget.subcategories,
+          accounts: widget.accounts,
         ),
       ),
     );
