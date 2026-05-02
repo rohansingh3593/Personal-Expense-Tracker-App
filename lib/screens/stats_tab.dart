@@ -18,7 +18,6 @@ class _StatsTabState extends State<StatsTab> {
   StatsRange _range = StatsRange.monthly;
   DateTimeRange? _customRange;
   String? _selectedCategory;
-  String? _selectedPerson;
 
   @override
   Widget build(BuildContext context) {
@@ -148,9 +147,7 @@ class _StatsTabState extends State<StatsTab> {
           _SubcategoryBreakdown(
             category: _selectedCategory!,
             transactions: txInRange,
-            allTransactions: widget.transactions,
-            selectedPerson: _selectedPerson,
-            onSelectPerson: (person) => setState(() => _selectedPerson = person),
+            onSelectPerson: (person) => _openPersonDetail(person),
           ),
         ],
         const SizedBox(height: 10),
@@ -162,6 +159,7 @@ class _StatsTabState extends State<StatsTab> {
                 dense: true,
                 title: Text(entry.key),
                 trailing: Text('₹${entry.value.toStringAsFixed(0)}'),
+                onTap: () => _openPersonDetail(entry.key),
               )),
           const SizedBox(height: 10),
         ],
@@ -219,6 +217,17 @@ class _StatsTabState extends State<StatsTab> {
       if (remaining > 0) result[person] = remaining;
     }
     return result;
+  }
+
+  void _openPersonDetail(String person) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _LendingPersonDetailScreen(
+          person: person,
+          transactions: widget.transactions,
+        ),
+      ),
+    );
   }
 }
 
@@ -344,15 +353,11 @@ class _SubcategoryBreakdown extends StatelessWidget {
   const _SubcategoryBreakdown({
     required this.category,
     required this.transactions,
-    required this.allTransactions,
-    required this.selectedPerson,
     required this.onSelectPerson,
   });
 
   final String category;
   final List<ExpenseTransaction> transactions;
-  final List<ExpenseTransaction> allTransactions;
-  final String? selectedPerson;
   final ValueChanged<String> onSelectPerson;
 
   @override
@@ -380,18 +385,17 @@ class _SubcategoryBreakdown extends StatelessWidget {
             onTap: category == 'Lending' ? () => onSelectPerson(entry.key) : null,
           );
         }),
-        if (category == 'Lending' && selectedPerson != null)
-          _LendingPersonDetail(
-            person: selectedPerson!,
-            transactions: allTransactions,
-          ),
       ],
     );
   }
 }
 
-class _LendingPersonDetail extends StatelessWidget {
-  const _LendingPersonDetail({required this.person, required this.transactions});
+class _LendingPersonDetailScreen extends StatelessWidget {
+  const _LendingPersonDetailScreen({
+    required this.person,
+    required this.transactions,
+  });
+
   final String person;
   final List<ExpenseTransaction> transactions;
 
@@ -411,25 +415,45 @@ class _LendingPersonDetail extends StatelessWidget {
       }
     }
     final pending = paid - received;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        Text(person, style: const TextStyle(fontWeight: FontWeight.bold)),
-        Text('Total Paid: ₹${paid.toStringAsFixed(0)}'),
-        Text('Total Received: ₹${received.toStringAsFixed(0)}'),
-        Text('Pending: ₹${pending.toStringAsFixed(0)}'),
-        const SizedBox(height: 6),
-        ...items.map((tx) {
-          final isPaid = tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit';
-          final label = isPaid ? 'Paid' : 'Received';
-          return ListTile(
-            dense: true,
-            title: Text('${tx.date.day}/${tx.date.month}/${tx.date.year} → $label ₹${tx.amount.toStringAsFixed(0)}'),
-            titleTextStyle: TextStyle(color: isPaid ? Colors.red : Colors.green),
-          );
-        }),
-      ],
+    return Scaffold(
+      appBar: AppBar(title: Text(person)),
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(person, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  Text('Paid: ₹${paid.toStringAsFixed(0)}'),
+                  Text('Received: ₹${received.toStringAsFixed(0)}'),
+                  Text('Pending: ₹${pending.toStringAsFixed(0)}'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text('History', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          if (items.isEmpty) const Text('No lending transactions for this person.'),
+          ...items.map((tx) {
+            final isPaid = tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit';
+            final label = isPaid ? 'Paid' : 'Received';
+            return ListTile(
+              dense: true,
+              title: Text('${tx.date.day}/${tx.date.month}/${tx.date.year}'),
+              trailing: Text(
+                '${isPaid ? '-' : '+'}₹${tx.amount.toStringAsFixed(0)}',
+                style: TextStyle(color: isPaid ? Colors.red : Colors.green, fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text('$label ₹${tx.amount.toStringAsFixed(0)}'),
+            );
+          }),
+        ],
+      ),
     );
   }
 }
