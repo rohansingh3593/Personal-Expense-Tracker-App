@@ -46,7 +46,11 @@ class AccountsTab extends StatelessWidget {
         SizedBox(
           height: 140,
           child: CustomPaint(
-            painter: _SimpleTrendPainter(_last30DaySeries(debitTx)),
+            painter: _SimpleTrendPainter(
+              _last30DaySeries(debitTx),
+              lineColor: Theme.of(context).colorScheme.primary,
+              gridColor: Theme.of(context).colorScheme.outlineVariant,
+            ),
             child: Container(),
           ),
         ),
@@ -171,16 +175,30 @@ class AccountsTab extends StatelessWidget {
 }
 
 class _SimpleTrendPainter extends CustomPainter {
-  _SimpleTrendPainter(this.values);
+  _SimpleTrendPainter(
+    this.values, {
+    required this.lineColor,
+    required this.gridColor,
+  });
 
   final List<double> values;
+  final Color lineColor;
+  final Color gridColor;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (values.isEmpty) return;
+    final gridPaint = Paint()
+      ..color = gridColor.withOpacity(0.35)
+      ..strokeWidth = 1;
+    for (var i = 1; i <= 3; i++) {
+      final y = (size.height / 4) * i;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
     final paint = Paint()
-      ..color = Colors.blue
-      ..strokeWidth = 2
+      ..color = lineColor
+      ..strokeWidth = 2.8
       ..style = PaintingStyle.stroke;
 
     final maxVal = max(1.0, values.reduce(max));
@@ -199,5 +217,5 @@ class _SimpleTrendPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SimpleTrendPainter oldDelegate) =>
-      oldDelegate.values != values;
+      oldDelegate.values != values || oldDelegate.lineColor != lineColor || oldDelegate.gridColor != gridColor;
 }

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../models/expense_transaction.dart';
+import 'transaction_detail_screen.dart';
 
 enum TransactionViewMode { daily, calendar, monthly, yearly }
 
@@ -12,11 +13,17 @@ class TransactionsTab extends StatefulWidget {
     required this.transactions,
     required this.onSyncSms,
     required this.budgets,
+    required this.expenseCategories,
+    required this.subcategories,
+    required this.onTransactionUpdated,
   });
 
   final List<ExpenseTransaction> transactions;
   final Future<void> Function() onSyncSms;
   final Map<String, double> budgets;
+  final List<String> expenseCategories;
+  final Map<String, List<String>> subcategories;
+  final ValueChanged<ExpenseTransaction> onTransactionUpdated;
 
   @override
   State<TransactionsTab> createState() => _TransactionsTabState();
@@ -78,7 +85,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
   Widget _buildModeContent() {
     switch (_mode) {
       case TransactionViewMode.daily:
-        return _DailyListView(transactions: _selectedMonthTx());
+        return _DailyListView(
+          transactions: _selectedMonthTx(),
+          expenseCategories: widget.expenseCategories,
+          subcategories: widget.subcategories,
+          onTransactionUpdated: widget.onTransactionUpdated,
+        );
       case TransactionViewMode.calendar:
         return _CalendarView(
           month: _selectedMonth,
@@ -145,9 +157,17 @@ class _MonthPicker extends StatelessWidget {
 }
 
 class _DailyListView extends StatelessWidget {
-  const _DailyListView({required this.transactions});
+  const _DailyListView({
+    required this.transactions,
+    required this.expenseCategories,
+    required this.subcategories,
+    required this.onTransactionUpdated,
+  });
 
   final List<ExpenseTransaction> transactions;
+  final List<String> expenseCategories;
+  final Map<String, List<String>> subcategories;
+  final ValueChanged<ExpenseTransaction> onTransactionUpdated;
 
   @override
   Widget build(BuildContext context) {
@@ -179,13 +199,40 @@ class _DailyListView extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 ...txs.map(
-                  (tx) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Expanded(child: Text(tx.merchant)),
-                        Text('\u20B9${tx.amount.toStringAsFixed(2)}'),
-                      ],
+                  (tx) => InkWell(
+                    onTap: () async {
+                      final updated = await Navigator.of(context).push<ExpenseTransaction>(
+                        MaterialPageRoute(
+                          builder: (_) => TransactionDetailScreen(
+                            transaction: tx,
+                            expenseCategories: expenseCategories,
+                            subcategories: subcategories,
+                          ),
+                        ),
+                      );
+                      if (updated != null) {
+                        onTransactionUpdated(updated);
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(tx.merchant),
+                                Text(
+                                  _formatTime(tx.date),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text('\u20B9${tx.amount.toStringAsFixed(2)}'),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -277,6 +324,7 @@ class _CalendarView extends StatelessWidget {
             (tx) => ListTile(
               dense: true,
               title: Text(tx.merchant),
+              subtitle: Text(_formatTime(tx.date)),
               trailing: Text('\u20B9${tx.amount.toStringAsFixed(2)}'),
             ),
           ),
@@ -427,4 +475,12 @@ String _monthName(int month) {
     'Dec'
   ];
   return names[month - 1];
+}
+
+String _formatTime(DateTime dt) {
+  var hour = dt.hour % 12;
+  if (hour == 0) hour = 12;
+  final mm = dt.minute.toString().padLeft(2, '0');
+  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+  return '${hour.toString().padLeft(2, '0')}:$mm $ampm';
 }

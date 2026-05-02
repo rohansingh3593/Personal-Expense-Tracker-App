@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'models/app_data.dart';
 import 'models/expense_transaction.dart';
 import 'screens/accounts_tab.dart';
+import 'screens/manual_add_transaction_screen.dart';
 import 'screens/more_tab.dart';
+import 'screens/paste_sms_screen.dart';
 import 'screens/stats_tab.dart';
 import 'screens/transactions_tab.dart';
+import 'services/app_data_repository.dart';
 import 'services/sms_service.dart';
 
 void main() {
@@ -22,16 +28,38 @@ class ExpenseTrackerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return const _ExpenseTrackerAppShell();
+  }
+}
+
+class _ExpenseTrackerAppShell extends StatefulWidget {
+  const _ExpenseTrackerAppShell();
+
+  @override
+  State<_ExpenseTrackerAppShell> createState() => _ExpenseTrackerAppShellState();
+}
+
+class _ExpenseTrackerAppShellState extends State<_ExpenseTrackerAppShell> {
+  String _themePalette = 'blue';
+
+  void _handleThemeChanged(String palette) {
+    setState(() => _themePalette = palette);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Expense Tracker',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      home: const HomeScreen(),
+      title: 'SpendSnap',
+      theme: _buildTheme(_themePalette),
+      home: HomeScreen(onThemeChanged: _handleThemeChanged),
     );
   }
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, required this.onThemeChanged});
+
+  final ValueChanged<String> onThemeChanged;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -39,33 +67,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final SmsService _smsService = SmsService();
-  final List<ExpenseTransaction> _transactions = [];
-
-  final List<String> _incomeCategories = ['Salary', 'Allowance', 'Bonus', 'Petty Cash', 'Other'];
-  final List<String> _expenseCategories = [
-    'Food',
-    'Social Life',
-    'Transport',
-    'Health',
-    'Education',
-    'Household',
-    'Beauty',
-    'Shopping',
-    'Travel',
-  ];
-  Map<String, List<String>> _subcategories = {
-    'Food': ['Lunch', 'Dinner', 'Eating Out', 'Beverages', 'Online', 'Fruits'],
-    'Transport': ['Fuel', 'Cab', 'Bus'],
-    'Shopping': ['Online', 'Offline'],
-    'Travel': ['Train', 'Flight', 'Hotel'],
-  };
-  Map<String, double> _budgets = {
-    'Food': 5000,
-    'Travel': 3000,
-    'Shopping': 4000,
-  };
+  final AppDataRepository _repository = AppDataRepository();
+  AppData _appData = AppData.defaults(version: AppDataRepository.currentSchemaVersion);
 
   bool _loading = false;
+  bool _dataLoaded = false;
   bool _permissionGranted = false;
   bool _limitedMode = false;
   bool _showOpenSettings = false;
@@ -79,6 +85,42 @@ class _HomeScreenState extends State<HomeScreen> {
       _limitedMode = true;
       _permissionMessage = 'SMS auto-read is disabled in this build.';
     }
+    _loadAppData();
+  }
+
+  List<ExpenseTransaction> get _transactions => _appData.transactions;
+  List<String> get _incomeCategories => _appData.incomeCategories;
+  List<String> get _expenseCategories => _appData.expenseCategories;
+  Map<String, List<String>> get _subcategories => _appData.subcategories;
+  Map<String, double> get _budgets => _appData.budgets;
+  String get _themePalette => (_appData.settings['themePalette'] as String?) ?? 'blue';
+
+  Future<void> _loadAppData() async {
+    setState(() => _loading = true);
+    final loaded = await _repository.load();
+    if (!mounted) return;
+    setState(() {
+      _appData = loaded;
+      _dataLoaded = true;
+      _loading = false;
+    });
+    widget.onThemeChanged(_themePalette);
+  }
+
+  Future<void> _saveAppData() async {
+    await _repository.save(_appData);
+  }
+
+  void _persistAppData() {
+    unawaited(_saveAppData());
+  }
+
+  void _updateThemePalette(String palette) {
+    final updatedSettings = Map<String, dynamic>.from(_appData.settings);
+    updatedSettings['themePalette'] = palette;
+    setState(() => _appData = _appData.copyWith(settings: updatedSettings));
+    widget.onThemeChanged(palette);
+    _persistAppData();
   }
 
   Future<void> _requestPermissionAndLoad() async {
@@ -115,16 +157,19 @@ class _HomeScreenState extends State<HomeScreen> {
       _limitedMode = false;
       _showOpenSettings = false;
       _permissionMessage = null;
-      _transactions
-        ..clear()
-        ..addAll(result.parsedExpenses);
+      _appData = _appData.copyWith(transactions: List<ExpenseTransaction>.from(result.parsedExpenses));
       _loading = false;
     });
+    await _saveAppData();
 
     for (final pending in result.pendingManual.take(20)) {
       final manual = await _askManualAmountForSms(pending);
       if (!mounted || manual == null) continue;
-      setState(() => _transactions.insert(0, manual));
+      setState(() {
+        final updated = List<ExpenseTransaction>.from(_transactions)..insert(0, manual);
+        _appData = _appData.copyWith(transactions: updated);
+      });
+      await _saveAppData();
     }
 
     _showBudgetAlerts();
@@ -222,11 +267,90 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openAddTransactionFlow() async {
+    final option = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_note),
+              title: const Text('Manual'),
+              onTap: () => Navigator.of(context).pop('manual'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.sms),
+              title: const Text('Paste SMS'),
+              onTap: () => Navigator.of(context).pop('sms'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || option == null) return;
+
+    ExpenseTransaction? created;
+    if (option == 'manual') {
+      created = await Navigator.of(context).push<ExpenseTransaction>(
+        MaterialPageRoute(
+          builder: (_) => ManualAddTransactionScreen(
+            expenseCategories: _expenseCategories,
+            subcategories: _subcategories,
+          ),
+        ),
+      );
+    } else {
+      created = await Navigator.of(context).push<ExpenseTransaction>(
+        MaterialPageRoute(
+          builder: (_) => PasteSmsScreen(
+            expenseCategories: _expenseCategories,
+            subcategories: _subcategories,
+          ),
+        ),
+      );
+    }
+    if (!mounted || created == null) return;
+    final transaction = created;
+    setState(() {
+      final updated = List<ExpenseTransaction>.from(_transactions)..insert(0, transaction);
+      _appData = _appData.copyWith(transactions: updated);
+    });
+    await _saveAppData();
+    _showBudgetAlerts();
+  }
+
+  void _updateTransaction(ExpenseTransaction updated) {
+    final index = _transactions.indexWhere((t) => t.id == updated.id);
+    if (index < 0) return;
+    setState(() {
+      final next = List<ExpenseTransaction>.from(_transactions);
+      next[index] = updated;
+      _appData = _appData.copyWith(transactions: next);
+    });
+    _persistAppData();
+    _showBudgetAlerts();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Expense Tracker')),
-      body: _loading
+      appBar: AppBar(
+        title: const Text('SpendSnap'),
+        actions: [
+          IconButton(
+            onPressed: _openAddTransactionFlow,
+            icon: const Icon(Icons.add),
+            tooltip: 'Add Transaction',
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openAddTransactionFlow,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Transaction'),
+      ),
+      body: _loading || !_dataLoaded
           ? const Center(child: CircularProgressIndicator())
           : !_permissionGranted && !_limitedMode
               ? _PermissionView(
@@ -256,6 +380,9 @@ class _HomeScreenState extends State<HomeScreen> {
           transactions: _transactions,
           onSyncSms: _requestPermissionAndLoad,
           budgets: _budgets,
+          expenseCategories: _expenseCategories,
+          subcategories: _subcategories,
+          onTransactionUpdated: _updateTransaction,
         );
       case 1:
         return StatsTab(transactions: _transactions);
@@ -270,23 +397,203 @@ class _HomeScreenState extends State<HomeScreen> {
           expenseCategories: _expenseCategories,
           subcategories: _subcategories,
           budgets: _budgets,
-          onUpdateIncomeCategories: (value) => setState(() {
-            _incomeCategories
-              ..clear()
-              ..addAll(value);
-          }),
-          onUpdateExpenseCategories: (value) => setState(() {
-            _expenseCategories
-              ..clear()
-              ..addAll(value);
-          }),
-          onUpdateSubcategories: (value) => setState(() => _subcategories = value),
-          onUpdateBudgets: (value) => setState(() => _budgets = value),
+          onUpdateIncomeCategories: (value) {
+            setState(() => _appData = _appData.copyWith(incomeCategories: List<String>.from(value)));
+            _persistAppData();
+          },
+          onUpdateExpenseCategories: (value) {
+            setState(() => _appData = _appData.copyWith(expenseCategories: List<String>.from(value)));
+            _persistAppData();
+          },
+          onUpdateSubcategories: (value) {
+            setState(() => _appData = _appData.copyWith(subcategories: value));
+            _persistAppData();
+          },
+          onUpdateBudgets: (value) {
+            setState(() => _appData = _appData.copyWith(budgets: value));
+            _persistAppData();
+          },
+          selectedThemePalette: _themePalette,
+          onThemeChanged: _updateThemePalette,
         );
       default:
         return const SizedBox.shrink();
     }
   }
+}
+
+ThemeData _buildTheme(String palette) {
+  switch (palette) {
+    case 'legacy_green':
+      return _paletteTheme(
+        primary: const Color(0xFF468432),
+        secondary: const Color(0xFF9AD872),
+        tertiary: const Color(0xFFFAA02E),
+        surface: const Color(0xFFFEF9E7),
+      );
+    case 'legacy_blue':
+      return _paletteTheme(
+        primary: const Color(0xFF2F2FE4),
+        secondary: const Color(0xFF162E93),
+        tertiary: const Color(0xFF1A1953),
+        surface: const Color(0xFF080616),
+      );
+    case 'legacy_orange':
+      return _paletteTheme(
+        primary: const Color(0xFFFF8B5A),
+        secondary: const Color(0xFFFFA95A),
+        tertiary: const Color(0xFFFF5A5A),
+        surface: const Color(0xFFFFD45A),
+      );
+    case 'legacy_red':
+      return _paletteTheme(
+        primary: const Color(0xFFBF1A1A),
+        secondary: const Color(0xFFFF6C0C),
+        tertiary: const Color(0xFF060771),
+        surface: const Color(0xFFFEE08F),
+      );
+    case 'legacy_mono':
+      return _paletteTheme(
+        primary: const Color(0xFF202940),
+        secondary: const Color(0xFF4B4038),
+        tertiary: const Color(0xFF9A8678),
+        surface: const Color(0xFFCAAA98),
+      );
+    case 'green':
+      return _paletteTheme(
+        primary: const Color(0xFF636B2F),
+        secondary: const Color(0xFFBAC095),
+        tertiary: const Color(0xFFD4DE95),
+        surface: const Color(0xFF3D4127),
+      );
+    case 'blue':
+      return _paletteTheme(
+        primary: const Color(0xFF6A89A7),
+        secondary: const Color(0xFFBDDDFC),
+        tertiary: const Color(0xFF88BDF2),
+        surface: const Color(0xFF384959),
+      );
+    case 'blue_eclipse':
+      return _paletteTheme(
+        primary: const Color(0xFF272757),
+        secondary: const Color(0xFF8686AC),
+        tertiary: const Color(0xFF505081),
+        surface: const Color(0xFF0F0E47),
+      );
+    case 'lush_forest':
+      return _paletteTheme(
+        primary: const Color(0xFF2E6F40),
+        secondary: const Color(0xFFCFFFDC),
+        tertiary: const Color(0xFF68BA7F),
+        surface: const Color(0xFF253D2C),
+      );
+    case 'green_juice':
+      return _paletteTheme(
+        primary: const Color(0xFF4CBB17),
+        secondary: const Color(0xFF48872B),
+        tertiary: const Color(0xFF39542C),
+        surface: const Color(0xFF293325),
+      );
+    case 'orange':
+      return _paletteTheme(
+        primary: const Color(0xFF713600),
+        secondary: const Color(0xFFC05800),
+        tertiary: const Color(0xFFFDFBD4),
+        surface: const Color(0xFF38240D),
+      );
+    case 'red':
+      return _paletteTheme(
+        primary: const Color(0xFFCD1C18),
+        secondary: const Color(0xFFFFA896),
+        tertiary: const Color(0xFF9B1313),
+        surface: const Color(0xFF38000A),
+      );
+    case 'wisteria_bloom':
+      return _paletteTheme(
+        primary: const Color(0xFFD3D3FF),
+        secondary: const Color(0xFF9400D3),
+        tertiary: const Color(0xFFD8BFD8),
+        surface: const Color(0xFFED80E9),
+      );
+    case 'blooming_romance':
+      return _paletteTheme(
+        primary: const Color(0xFF660033),
+        secondary: const Color(0xFFE673AC),
+        tertiary: const Color(0xFF469110),
+        surface: const Color(0xFF00520A),
+      );
+    case 'lavender_fields':
+      return _paletteTheme(
+        primary: const Color(0xFFFDFBD4),
+        secondary: const Color(0xFFBDB96A),
+        tertiary: const Color(0xFFC1BFFF),
+        surface: const Color(0xFFCF6DFC),
+      );
+    case 'mono':
+    case 'stormy_ink':
+      return _paletteTheme(
+        primary: const Color(0xFF202940),
+        secondary: const Color(0xFF4B4038),
+        tertiary: const Color(0xFF9A8678),
+        surface: const Color(0xFFCAAA98),
+      );
+    default:
+      return _paletteTheme(
+        primary: const Color(0xFF2F2FE4),
+        secondary: const Color(0xFF162E93),
+        tertiary: const Color(0xFF1A1953),
+        surface: const Color(0xFF080616),
+      );
+  }
+}
+
+ThemeData _paletteTheme({
+  required Color primary,
+  required Color secondary,
+  required Color tertiary,
+  required Color surface,
+}) {
+  final surfaceBrightness = ThemeData.estimateBrightnessForColor(surface);
+  final isDark = surfaceBrightness == Brightness.dark;
+  final scheme = ColorScheme.fromSeed(
+    seedColor: primary,
+    primary: primary,
+    secondary: secondary,
+    tertiary: tertiary,
+    surface: surface,
+    brightness: isDark ? Brightness.dark : Brightness.light,
+  );
+
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: scheme.surface,
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.primaryContainer,
+      foregroundColor: scheme.onPrimaryContainer,
+    ),
+    cardTheme: CardThemeData(
+      color: scheme.surfaceContainerHighest,
+    ),
+    listTileTheme: ListTileThemeData(
+      textColor: scheme.onSurface,
+      iconColor: scheme.onSurfaceVariant,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      labelStyle: TextStyle(color: scheme.onSurfaceVariant),
+      hintStyle: TextStyle(color: scheme.onSurfaceVariant),
+      enabledBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: scheme.outline),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: scheme.primary, width: 1.4),
+      ),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: scheme.primary,
+      foregroundColor: scheme.onPrimary,
+    ),
+  );
 }
 
 class _PermissionView extends StatelessWidget {

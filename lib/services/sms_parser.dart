@@ -1,5 +1,25 @@
 import '../models/expense_transaction.dart';
 
+class ParsedSmsDraft {
+  const ParsedSmsDraft({
+    required this.rawMessage,
+    required this.date,
+    this.amount,
+    required this.merchant,
+    required this.type,
+    required this.category,
+    this.subcategory,
+  });
+
+  final String rawMessage;
+  final DateTime date;
+  final double? amount;
+  final String merchant;
+  final String type;
+  final String category;
+  final String? subcategory;
+}
+
 class SmsParser {
   static final RegExp _amountRegex =
       RegExp(r'(?:rs\.?|inr|\u20B9)\s?([\d,]+(?:\.\d{1,2})?)', caseSensitive: false);
@@ -9,25 +29,42 @@ class SmsParser {
   );
 
   ExpenseTransaction? parse(String body, DateTime smsDate) {
-    if (!looksLikeTransaction(body)) return null;
+    final draft = extractDraft(body, smsDate);
+    if (!looksLikeTransaction(body) || draft.amount == null) return null;
+    return ExpenseTransaction(
+      id: '${draft.date.millisecondsSinceEpoch}-${draft.merchant.hashCode}',
+      amount: draft.amount!,
+      account: 'Bank',
+      merchant: draft.merchant,
+      category: draft.category,
+      subcategory: draft.subcategory,
+      type: draft.type,
+      date: draft.date,
+      note: '',
+      description: '',
+      rawMessage: draft.rawMessage,
+      source: 'sms_auto',
+    );
+  }
 
+  ParsedSmsDraft extractDraft(String body, DateTime smsDate) {
     final amountMatch = _amountRegex.firstMatch(body);
-    if (amountMatch == null) return null;
-
-    final rawAmount = amountMatch.group(1)?.replaceAll(',', '');
+    final rawAmount = amountMatch?.group(1)?.replaceAll(',', '');
     final amount = double.tryParse(rawAmount ?? '');
-    if (amount == null) return null;
 
     final merchantMatch = _merchantRegex.firstMatch(body);
     final merchant = _sanitizeMerchant(merchantMatch?.group(1) ?? 'Unknown');
+    final category = _categorizeMerchant(merchant);
+    final subcategory = _suggestSubcategory(merchant, category);
 
-    return ExpenseTransaction(
+    return ParsedSmsDraft(
+      rawMessage: body,
+      date: smsDate,
       amount: amount,
       merchant: merchant,
-      category: _categorizeMerchant(merchant),
-      type: detectType(body),
-      date: smsDate,
-      rawMessage: body,
+      type: detectType(body).toLowerCase(),
+      category: category,
+      subcategory: subcategory,
     );
   }
 
@@ -38,14 +75,22 @@ class SmsParser {
   }) {
     final merchantMatch = _merchantRegex.firstMatch(body);
     final merchant = _sanitizeMerchant(merchantMatch?.group(1) ?? 'Unknown');
+    final category = _categorizeMerchant(merchant);
+    final subcategory = _suggestSubcategory(merchant, category);
 
     return ExpenseTransaction(
+      id: '${smsDate.millisecondsSinceEpoch}-${merchant.hashCode}-manual',
       amount: amount,
+      account: 'Bank',
       merchant: merchant,
-      category: _categorizeMerchant(merchant),
+      category: category,
+      subcategory: subcategory,
       type: detectType(body),
       date: smsDate,
+      note: '',
+      description: '',
       rawMessage: body,
+      source: 'sms_manual',
     );
   }
 
@@ -69,6 +114,16 @@ class SmsParser {
     if (lower.contains('uber') || lower.contains('ola')) return 'Travel';
     if (lower.contains('amazon') || lower.contains('flipkart')) return 'Shopping';
     return 'Others';
+  }
+
+  String? _suggestSubcategory(String merchant, String category) {
+    final lower = merchant.toLowerCase();
+    if (category == 'Food') return 'Eating Out';
+    if (category == 'Travel') return 'Cab';
+    if (category == 'Shopping' && (lower.contains('amazon') || lower.contains('flipkart'))) {
+      return 'Online';
+    }
+    return null;
   }
 
   String _sanitizeMerchant(String merchant) {

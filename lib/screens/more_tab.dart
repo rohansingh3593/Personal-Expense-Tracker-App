@@ -11,6 +11,8 @@ class MoreTab extends StatelessWidget {
     required this.onUpdateExpenseCategories,
     required this.onUpdateSubcategories,
     required this.onUpdateBudgets,
+    required this.selectedThemePalette,
+    required this.onThemeChanged,
   });
 
   final List<String> incomeCategories;
@@ -21,9 +23,12 @@ class MoreTab extends StatelessWidget {
   final ValueChanged<List<String>> onUpdateExpenseCategories;
   final ValueChanged<Map<String, List<String>>> onUpdateSubcategories;
   final ValueChanged<Map<String, double>> onUpdateBudgets;
+  final String selectedThemePalette;
+  final ValueChanged<String> onThemeChanged;
 
   @override
   Widget build(BuildContext context) {
+    final current = _themeInfo(selectedThemePalette);
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -117,6 +122,18 @@ class MoreTab extends StatelessWidget {
           },
         ),
         const SizedBox(height: 12),
+        const Text('Theme', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('Change App Theme'),
+            subtitle: Text('Current: ${current.name} (${current.colors.join(', ')})'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showThemePicker(context),
+          ),
+        ),
+        const SizedBox(height: 12),
         const Text('Budget Settings', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         ...expenseCategories.map(
@@ -144,6 +161,185 @@ class MoreTab extends StatelessWidget {
       ],
     );
   }
+
+  Future<void> _showThemePicker(BuildContext context) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ..._themePickerKeys.map((key) => _themeOptionTile(context, key)),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && selected != selectedThemePalette) {
+      onThemeChanged(selected);
+    }
+  }
+
+  Widget _themeOptionTile(BuildContext context, String key) {
+    final info = _themeInfo(key);
+    final isSelected = selectedThemePalette == key;
+    return ListTile(
+      leading: Icon(
+        isSelected ? Icons.check_circle : Icons.circle_outlined,
+        color: isSelected ? Theme.of(context).colorScheme.primary : null,
+      ),
+      title: Text(info.name),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Row(
+            children: info.colors
+                .map(
+                  (hex) => Container(
+                    width: 16,
+                    height: 16,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: _hexToColor(hex),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black12),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 4),
+          Text(info.colors.join('  ')),
+        ],
+      ),
+      isThreeLine: true,
+      onTap: () => Navigator.of(context).pop(key),
+    );
+  }
+}
+
+ThemePaletteInfo _themeInfo(String key) {
+  switch (key) {
+    case 'legacy_green':
+      return const ThemePaletteInfo(
+        name: 'Green palette',
+        colors: ['#468432', '#9AD872', '#FEF9E7', '#FAA02E'],
+      );
+    case 'legacy_blue':
+      return const ThemePaletteInfo(
+        name: 'Blue palette',
+        colors: ['#2F2FE4', '#162E93', '#1A1953', '#080616'],
+      );
+    case 'legacy_orange':
+      return const ThemePaletteInfo(
+        name: 'Orange palette',
+        colors: ['#FF5A5A', '#FF8B5A', '#FFA95A', '#FFD45A'],
+      );
+    case 'legacy_red':
+      return const ThemePaletteInfo(
+        name: 'Red palette',
+        colors: ['#BF1A1A', '#FF6C0C', '#FEE08F', '#060771'],
+      );
+    case 'legacy_mono':
+      return const ThemePaletteInfo(
+        name: 'Black/White palette',
+        colors: ['#202940', '#4B4038', '#9A8678', '#CAAA98'],
+      );
+    case 'blue':
+      return const ThemePaletteInfo(
+        name: 'Stormy Morning',
+        colors: ['#6A89A7', '#BDDDFC', '#88BDF2', '#384959'],
+      );
+    case 'green':
+      return const ThemePaletteInfo(
+        name: 'Mossy Hollow',
+        colors: ['#636B2F', '#BAC095', '#D4DE95', '#3D4127'],
+      );
+    case 'blue_eclipse':
+      return const ThemePaletteInfo(
+        name: 'Blue eclipse',
+        colors: ['#272757', '#8686AC', '#505081', '#0F0E47'],
+      );
+    case 'lush_forest':
+      return const ThemePaletteInfo(
+        name: 'Lush forest',
+        colors: ['#2E6F40', '#CFFFDC', '#68BA7F', '#253D2C'],
+      );
+    case 'green_juice':
+      return const ThemePaletteInfo(
+        name: 'Green juice',
+        colors: ['#4CBB17', '#48872B', '#39542C', '#293325'],
+      );
+    case 'orange':
+      return const ThemePaletteInfo(
+        name: 'Chocolate Truffle',
+        colors: ['#713600', '#C05800', '#FDFBD4', '#38240D'],
+      );
+    case 'red':
+      return const ThemePaletteInfo(
+        name: 'Chili Spice',
+        colors: ['#CD1C18', '#FFA896', '#9B1313', '#38000A'],
+      );
+    case 'wisteria_bloom':
+      return const ThemePaletteInfo(
+        name: 'Wisteria bloom',
+        colors: ['#D3D3FF', '#9400D3', '#D8BFD8', '#ED80E9'],
+      );
+    case 'blooming_romance':
+      return const ThemePaletteInfo(
+        name: 'Blooming romance',
+        colors: ['#660033', '#E673AC', '#469110', '#00520A'],
+      );
+    case 'lavender_fields':
+      return const ThemePaletteInfo(
+        name: 'Lavender fields',
+        colors: ['#FDFBD4', '#BDB96A', '#C1BFFF', '#CF6DFC'],
+      );
+    case 'mono':
+    case 'stormy_ink':
+      return const ThemePaletteInfo(
+        name: 'Stormy Ink',
+        colors: ['#202940', '#4B4038', '#9A8678', '#CAAA98'],
+      );
+    default:
+      return const ThemePaletteInfo(
+        name: 'Stormy Morning',
+        colors: ['#6A89A7', '#BDDDFC', '#88BDF2', '#384959'],
+      );
+  }
+}
+
+const List<String> _themePickerKeys = [
+  'legacy_green',
+  'legacy_blue',
+  'legacy_orange',
+  'legacy_red',
+  'legacy_mono',
+  'blue',
+  'green',
+  'blue_eclipse',
+  'lush_forest',
+  'green_juice',
+  'orange',
+  'red',
+  'wisteria_bloom',
+  'blooming_romance',
+  'lavender_fields',
+];
+
+Color _hexToColor(String hex) {
+  final normalized = hex.replaceAll('#', '');
+  return Color(int.parse('FF$normalized', radix: 16));
+}
+
+class ThemePaletteInfo {
+  const ThemePaletteInfo({
+    required this.name,
+    required this.colors,
+  });
+
+  final String name;
+  final List<String> colors;
 }
 
 class _SectionTitle extends StatelessWidget {

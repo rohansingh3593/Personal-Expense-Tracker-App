@@ -1,0 +1,246 @@
+import 'package:flutter/material.dart';
+
+import '../models/expense_transaction.dart';
+
+class ManualAddTransactionScreen extends StatefulWidget {
+  const ManualAddTransactionScreen({
+    super.key,
+    required this.expenseCategories,
+    required this.subcategories,
+  });
+
+  final List<String> expenseCategories;
+  final Map<String, List<String>> subcategories;
+
+  @override
+  State<ManualAddTransactionScreen> createState() => _ManualAddTransactionScreenState();
+}
+
+class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen> {
+  late final TextEditingController _merchantController;
+  late final TextEditingController _amountController;
+  late final TextEditingController _noteController;
+  late final TextEditingController _descriptionController;
+  late DateTime _dateTime;
+  late String _type;
+  late String _account;
+  late String _category;
+  String? _subcategory;
+  late bool _bookmarked;
+
+  @override
+  void initState() {
+    super.initState();
+    _merchantController = TextEditingController();
+    _amountController = TextEditingController();
+    _noteController = TextEditingController();
+    _descriptionController = TextEditingController();
+    _dateTime = DateTime.now();
+    _type = 'Debit';
+    _account = 'Cash';
+    _bookmarked = false;
+    _category = widget.expenseCategories.isEmpty ? 'Others' : widget.expenseCategories.first;
+    final subOptions = widget.subcategories[_category] ?? const <String>[];
+    _subcategory = subOptions.isEmpty ? null : subOptions.first;
+  }
+
+  @override
+  void dispose() {
+    _merchantController.dispose();
+    _amountController.dispose();
+    _noteController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final d = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDate: _dateTime,
+    );
+    if (d == null) return;
+    setState(() {
+      _dateTime = DateTime(d.year, d.month, d.day, _dateTime.hour, _dateTime.minute);
+    });
+  }
+
+  Future<void> _pickTime() async {
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_dateTime),
+    );
+    if (t == null) return;
+    setState(() {
+      _dateTime = DateTime(
+        _dateTime.year,
+        _dateTime.month,
+        _dateTime.day,
+        t.hour,
+        t.minute,
+      );
+    });
+  }
+
+  void _save() {
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter valid amount')));
+      return;
+    }
+    final tx = ExpenseTransaction(
+      id: '${DateTime.now().millisecondsSinceEpoch}-${_merchantController.text.hashCode}',
+      amount: amount,
+      account: _account,
+      merchant: _merchantController.text.trim().isEmpty ? 'Manual' : _merchantController.text.trim(),
+      category: _category,
+      subcategory: _subcategory,
+      type: _type,
+      date: _dateTime,
+      note: _noteController.text.trim(),
+      description: _descriptionController.text.trim(),
+      isBookmarked: _bookmarked,
+      rawMessage: '',
+      source: 'manual',
+    );
+    Navigator.of(context).pop(tx);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final subOptions = widget.subcategories[_category] ?? const <String>[];
+    return Scaffold(
+      appBar: AppBar(title: const Text('Transaction')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'Credit', label: Text('Income')),
+              ButtonSegment(value: 'Debit', label: Text('Expense')),
+              ButtonSegment(value: 'Transfer', label: Text('Transfer')),
+            ],
+            selected: {_type},
+            onSelectionChanged: (value) => setState(() => _type = value.first),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Date & Time', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickDate,
+                          icon: const Icon(Icons.calendar_today),
+                          label: Text(_formatDate(_dateTime)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickTime,
+                          icon: const Icon(Icons.access_time),
+                          label: Text(_formatTime(_dateTime)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _account,
+            items: const ['Cash', 'Bank']
+                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                .toList(),
+            onChanged: (v) => setState(() => _account = v ?? 'Cash'),
+            decoration: const InputDecoration(labelText: 'Account', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _amountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Amount', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _merchantController,
+            decoration: const InputDecoration(labelText: 'Merchant', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _category,
+            items: widget.expenseCategories
+                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                .toList(),
+            onChanged: (v) {
+              if (v == null) return;
+              setState(() {
+                _category = v;
+                final options = widget.subcategories[_category] ?? const <String>[];
+                _subcategory = options.isEmpty ? null : options.first;
+              });
+            },
+            decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _subcategory,
+            items: subOptions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+            onChanged: (v) => setState(() => _subcategory = v),
+            decoration: const InputDecoration(labelText: 'Subcategory', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _noteController,
+            decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _descriptionController,
+            minLines: 3,
+            maxLines: 4,
+            decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+          ),
+          SwitchListTile(
+            value: _bookmarked,
+            title: const Text('Bookmark'),
+            onChanged: (v) => setState(() => _bookmarked = v),
+          ),
+          FilledButton(
+            onPressed: _save,
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatDate(DateTime dt) {
+  final d = dt.day.toString().padLeft(2, '0');
+  final month = _monthShort(dt.month);
+  return '$d-$month-${dt.year}';
+}
+
+String _formatTime(DateTime dt) {
+  var hour = dt.hour % 12;
+  if (hour == 0) hour = 12;
+  final mm = dt.minute.toString().padLeft(2, '0');
+  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+  return '${hour.toString().padLeft(2, '0')}:$mm $ampm';
+}
+
+String _monthShort(int month) {
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return names[month - 1];
+}
