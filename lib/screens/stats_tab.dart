@@ -148,6 +148,7 @@ class _StatsTabState extends State<StatsTab> {
           _SubcategoryBreakdown(
             category: _selectedCategory!,
             transactions: txInRange,
+            allTransactions: widget.transactions,
             selectedPerson: _selectedPerson,
             onSelectPerson: (person) => setState(() => _selectedPerson = person),
           ),
@@ -343,12 +344,14 @@ class _SubcategoryBreakdown extends StatelessWidget {
   const _SubcategoryBreakdown({
     required this.category,
     required this.transactions,
+    required this.allTransactions,
     required this.selectedPerson,
     required this.onSelectPerson,
   });
 
   final String category;
   final List<ExpenseTransaction> transactions;
+  final List<ExpenseTransaction> allTransactions;
   final String? selectedPerson;
   final ValueChanged<String> onSelectPerson;
 
@@ -380,7 +383,7 @@ class _SubcategoryBreakdown extends StatelessWidget {
         if (category == 'Lending' && selectedPerson != null)
           _LendingPersonDetail(
             person: selectedPerson!,
-            transactions: transactions,
+            transactions: allTransactions,
           ),
       ],
     );
