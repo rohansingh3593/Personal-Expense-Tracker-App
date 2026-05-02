@@ -42,6 +42,52 @@ class MoreTab extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       children: [
         _SectionTitle(
+          title: 'Accounts',
+          onAdd: () => _addCategoryDialog(
+            context,
+            'account',
+            onAdd: (name) {
+              final updated = [...accounts, {'id': DateTime.now().millisecondsSinceEpoch.toString(), 'name': toTitleCase(name), 'is_active': true}];
+              onUpdateAccounts(updated);
+            },
+          ),
+        ),
+        ...accounts.map((account) => ListTile(
+              title: Text(account['name'].toString()),
+              subtitle: Text(account['is_active'] == true ? 'Active' : 'Inactive'),
+              trailing: Wrap(
+                spacing: 4,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _addCategoryDialog(
+                      context,
+                      'account name',
+                      initial: account['name'].toString(),
+                      onAdd: (name) {
+                        final updated = accounts.map((a) {
+                          if (a['id'].toString() != account['id'].toString()) return a;
+                          return {...a, 'name': toTitleCase(name)};
+                        }).toList();
+                        onUpdateAccounts(updated);
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () {
+                      final updated = accounts.map((a) {
+                        if (a['id'].toString() != account['id'].toString()) return a;
+                        return {...a, 'is_active': false};
+                      }).toList();
+                      onUpdateAccounts(updated);
+                    },
+                  ),
+                ],
+              ),
+            )),
+        const SizedBox(height: 12),
+        _SectionTitle(
           title: 'Income Categories',
           onAdd: () => _addCategoryDialog(
             context,
@@ -127,52 +173,6 @@ class MoreTab extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 12),
-        _SectionTitle(
-          title: 'Accounts',
-          onAdd: () => _addCategoryDialog(
-            context,
-            'account',
-            onAdd: (name) {
-              final updated = [...accounts, {'id': DateTime.now().millisecondsSinceEpoch.toString(), 'name': toTitleCase(name), 'is_active': true}];
-              onUpdateAccounts(updated);
-            },
-          ),
-        ),
-        ...accounts.map((account) => ListTile(
-              title: Text(account['name'].toString()),
-              subtitle: Text(account['is_active'] == true ? 'Active' : 'Inactive'),
-              trailing: Wrap(
-                spacing: 4,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _addCategoryDialog(
-                      context,
-                      'account name',
-                      initial: account['name'].toString(),
-                      onAdd: (name) {
-                        final updated = accounts.map((a) {
-                          if (a['id'].toString() != account['id'].toString()) return a;
-                          return {...a, 'name': toTitleCase(name)};
-                        }).toList();
-                        onUpdateAccounts(updated);
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () {
-                      final updated = accounts.map((a) {
-                        if (a['id'].toString() != account['id'].toString()) return a;
-                        return {...a, 'is_active': false};
-                      }).toList();
-                      onUpdateAccounts(updated);
-                    },
-                  ),
-                ],
-              ),
-            )),
         const SizedBox(height: 12),
         const Text('Theme', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
