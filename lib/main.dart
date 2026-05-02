@@ -102,12 +102,32 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadAppData() async {
     setState(() => _loading = true);
     final loaded = await _repository.load();
+    var changed = false;
+    final normalizedExpenseCategories = List<String>.from(loaded.expenseCategories);
+    if (!normalizedExpenseCategories.contains('Lending')) {
+      normalizedExpenseCategories.add('Lending');
+      changed = true;
+    }
+    final normalizedSubcategories = Map<String, List<String>>.from(loaded.subcategories);
+    if (!normalizedSubcategories.containsKey('Lending')) {
+      normalizedSubcategories['Lending'] = <String>[];
+      changed = true;
+    }
+    final normalized = changed
+        ? loaded.copyWith(
+            expenseCategories: normalizedExpenseCategories,
+            subcategories: normalizedSubcategories,
+          )
+        : loaded;
     if (!mounted) return;
     setState(() {
-      _appData = loaded;
+      _appData = normalized;
       _dataLoaded = true;
       _loading = false;
     });
+    if (changed) {
+      unawaited(_repository.save(normalized));
+    }
     widget.onThemeChanged(_themePalette);
   }
 
