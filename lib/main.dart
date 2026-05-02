@@ -91,6 +91,10 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ExpenseTransaction> get _transactions => _appData.transactions;
   List<String> get _incomeCategories => _appData.incomeCategories;
   List<String> get _expenseCategories => _appData.expenseCategories;
+  Set<String> get _archivedExpenseCategories =>
+      Set<String>.from((_appData.settings['archivedExpenseCategories'] as List?)?.map((e) => e.toString()) ?? const []);
+  List<String> get _activeExpenseCategories =>
+      _expenseCategories.where((category) => !_archivedExpenseCategories.contains(category)).toList();
   Map<String, List<String>> get _subcategories => _appData.subcategories;
   Map<String, double> get _budgets => _appData.budgets;
   String get _themePalette => (_appData.settings['themePalette'] as String?) ?? 'blue';
@@ -296,6 +300,7 @@ class _HomeScreenState extends State<HomeScreen> {
         MaterialPageRoute(
           builder: (_) => ManualAddTransactionScreen(
             expenseCategories: _expenseCategories,
+            archivedExpenseCategories: _archivedExpenseCategories,
             subcategories: _subcategories,
           ),
         ),
@@ -305,6 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
         MaterialPageRoute(
           builder: (_) => PasteSmsScreen(
             expenseCategories: _expenseCategories,
+            archivedExpenseCategories: _archivedExpenseCategories,
             subcategories: _subcategories,
           ),
         ),
@@ -395,6 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return MoreTab(
           incomeCategories: _incomeCategories,
           expenseCategories: _expenseCategories,
+          activeExpenseCategories: _activeExpenseCategories,
           subcategories: _subcategories,
           budgets: _budgets,
           onUpdateIncomeCategories: (value) {
@@ -402,7 +409,13 @@ class _HomeScreenState extends State<HomeScreen> {
             _persistAppData();
           },
           onUpdateExpenseCategories: (value) {
-            setState(() => _appData = _appData.copyWith(expenseCategories: List<String>.from(value)));
+            final merged = [
+              ...value,
+              ..._expenseCategories.where(
+                (category) => _archivedExpenseCategories.contains(category) && !value.contains(category),
+              ),
+            ];
+            setState(() => _appData = _appData.copyWith(expenseCategories: List<String>.from(merged)));
             _persistAppData();
           },
           onUpdateSubcategories: (value) {
@@ -411,6 +424,12 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           onUpdateBudgets: (value) {
             setState(() => _appData = _appData.copyWith(budgets: value));
+            _persistAppData();
+          },
+          onUpdateArchivedExpenseCategories: (value) {
+            final updatedSettings = Map<String, dynamic>.from(_appData.settings);
+            updatedSettings['archivedExpenseCategories'] = value.toList()..sort();
+            setState(() => _appData = _appData.copyWith(settings: updatedSettings));
             _persistAppData();
           },
           selectedThemePalette: _themePalette,

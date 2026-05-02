@@ -6,10 +6,12 @@ class ManualAddTransactionScreen extends StatefulWidget {
   const ManualAddTransactionScreen({
     super.key,
     required this.expenseCategories,
+    required this.archivedExpenseCategories,
     required this.subcategories,
   });
 
   final List<String> expenseCategories;
+  final Set<String> archivedExpenseCategories;
   final Map<String, List<String>> subcategories;
 
   @override
@@ -39,7 +41,10 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
     _type = 'Debit';
     _account = 'Cash';
     _bookmarked = false;
-    _category = widget.expenseCategories.isEmpty ? 'Others' : widget.expenseCategories.first;
+    final activeCategories = widget.expenseCategories
+        .where((category) => !widget.archivedExpenseCategories.contains(category))
+        .toList();
+    _category = activeCategories.isEmpty ? 'Others' : activeCategories.first;
     final subOptions = widget.subcategories[_category] ?? const <String>[];
     _subcategory = subOptions.isEmpty ? null : subOptions.first;
   }
@@ -109,6 +114,9 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
 
   @override
   Widget build(BuildContext context) {
+    final activeCategories = widget.expenseCategories
+        .where((category) => !widget.archivedExpenseCategories.contains(category))
+        .toList();
     final subOptions = widget.subcategories[_category] ?? const <String>[];
     return Scaffold(
       appBar: AppBar(title: const Text('Transaction')),
@@ -179,7 +187,7 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             value: _category,
-            items: widget.expenseCategories
+            items: activeCategories
                 .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                 .toList(),
             onChanged: (v) {

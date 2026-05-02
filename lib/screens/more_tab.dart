@@ -5,6 +5,8 @@ class MoreTab extends StatelessWidget {
     super.key,
     required this.incomeCategories,
     required this.expenseCategories,
+    required this.activeExpenseCategories,
+    required this.onUpdateArchivedExpenseCategories,
     required this.subcategories,
     required this.budgets,
     required this.onUpdateIncomeCategories,
@@ -17,12 +19,14 @@ class MoreTab extends StatelessWidget {
 
   final List<String> incomeCategories;
   final List<String> expenseCategories;
+  final List<String> activeExpenseCategories;
   final Map<String, List<String>> subcategories;
   final Map<String, double> budgets;
   final ValueChanged<List<String>> onUpdateIncomeCategories;
   final ValueChanged<List<String>> onUpdateExpenseCategories;
   final ValueChanged<Map<String, List<String>>> onUpdateSubcategories;
   final ValueChanged<Map<String, double>> onUpdateBudgets;
+  final ValueChanged<Set<String>> onUpdateArchivedExpenseCategories;
   final String selectedThemePalette;
   final ValueChanged<String> onThemeChanged;
 
@@ -64,15 +68,12 @@ class MoreTab extends StatelessWidget {
           ),
         ),
         _ReorderableCategoryList(
-          items: expenseCategories,
+          items: activeExpenseCategories,
           onReorder: onUpdateExpenseCategories,
           onDelete: (name) {
-            final updated = [...expenseCategories]..remove(name);
-            final updatedSub = Map<String, List<String>>.from(subcategories)..remove(name);
-            final updatedBudgets = Map<String, double>.from(budgets)..remove(name);
-            onUpdateExpenseCategories(updated);
-            onUpdateSubcategories(updatedSub);
-            onUpdateBudgets(updatedBudgets);
+            final archived = expenseCategories.where((category) => !activeExpenseCategories.contains(category)).toSet();
+            archived.add(name);
+            onUpdateArchivedExpenseCategories(archived);
           },
         ),
         const SizedBox(height: 12),

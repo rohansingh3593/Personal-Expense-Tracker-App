@@ -7,10 +7,12 @@ class PasteSmsScreen extends StatefulWidget {
   const PasteSmsScreen({
     super.key,
     required this.expenseCategories,
+    required this.archivedExpenseCategories,
     required this.subcategories,
   });
 
   final List<String> expenseCategories;
+  final Set<String> archivedExpenseCategories;
   final Map<String, List<String>> subcategories;
 
   @override
@@ -53,7 +55,9 @@ class _PasteSmsScreenState extends State<PasteSmsScreen> {
       MaterialPageRoute(
         builder: (_) => ReviewTransactionScreen(
           draft: _draft!,
-          expenseCategories: widget.expenseCategories,
+          expenseCategories: widget.expenseCategories
+              .where((category) => !widget.archivedExpenseCategories.contains(category))
+              .toList(),
           subcategories: widget.subcategories,
         ),
       ),
