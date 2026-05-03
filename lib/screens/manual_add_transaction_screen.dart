@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/expense_transaction.dart';
+import '../utils/text_format.dart';
 
 class ManualAddTransactionScreen extends StatefulWidget {
   const ManualAddTransactionScreen({
     super.key,
     required this.expenseCategories,
+    required this.archivedExpenseCategories,
     required this.subcategories,
+    required this.accounts,
   });
 
   final List<String> expenseCategories;
+  final Set<String> archivedExpenseCategories;
   final Map<String, List<String>> subcategories;
+  final List<String> accounts;
 
   @override
   State<ManualAddTransactionScreen> createState() => _ManualAddTransactionScreenState();
@@ -23,6 +29,7 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
   late final TextEditingController _descriptionController;
   late DateTime _dateTime;
   late String _type;
+  String _lendingFlow = 'paid';
   late String _account;
   late String _category;
   String? _subcategory;
@@ -37,9 +44,12 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
     _descriptionController = TextEditingController();
     _dateTime = DateTime.now();
     _type = 'Debit';
-    _account = 'Cash';
+    _account = widget.accounts.isEmpty ? 'Cash' : widget.accounts.first;
     _bookmarked = false;
-    _category = widget.expenseCategories.isEmpty ? 'Others' : widget.expenseCategories.first;
+    final activeCategories = widget.expenseCategories
+        .where((category) => !widget.archivedExpenseCategories.contains(category))
+        .toList();
+    _category = activeCategories.isEmpty ? 'Others' : activeCategories.first;
     final subOptions = widget.subcategories[_category] ?? const <String>[];
     _subcategory = subOptions.isEmpty ? null : subOptions.first;
   }
@@ -93,10 +103,10 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
       id: '${DateTime.now().millisecondsSinceEpoch}-${_merchantController.text.hashCode}',
       amount: amount,
       account: _account,
-      merchant: _merchantController.text.trim().isEmpty ? 'Manual' : _merchantController.text.trim(),
+      merchant: _merchantController.text.trim().isEmpty ? 'Manual' : toTitleCase(_merchantController.text.trim()),
       category: _category,
       subcategory: _subcategory,
-      type: _type,
+      type: _category == 'Lending' ? _lendingFlow : _type,
       date: _dateTime,
       note: _noteController.text.trim(),
       description: _descriptionController.text.trim(),
@@ -109,6 +119,9 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
 
   @override
   Widget build(BuildContext context) {
+    final activeCategories = widget.expenseCategories
+        .where((category) => !widget.archivedExpenseCategories.contains(category))
+        .toList();
     final subOptions = widget.subcategories[_category] ?? const <String>[];
     return Scaffold(
       appBar: AppBar(title: const Text('Transaction')),
@@ -125,6 +138,26 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
             onSelectionChanged: (value) => setState(() => _type = value.first),
           ),
           const SizedBox(height: 10),
+          if (_category == 'Lending')
+            Card(
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    value: 'paid',
+                    groupValue: _lendingFlow,
+                    title: const Text('Paid (You gave money)'),
+                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'paid'),
+                  ),
+                  RadioListTile<String>(
+                    value: 'received',
+                    groupValue: _lendingFlow,
+                    title: const Text('Received (You got money back)'),
+                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'paid'),
+                  ),
+                ],
+              ),
+            ),
+          if (_category == 'Lending') const SizedBox(height: 10),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -159,17 +192,24 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             value: _account,
-            items: const ['Cash', 'Bank']
+            items: widget.accounts
                 .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                 .toList(),
-            onChanged: (v) => setState(() => _account = v ?? 'Cash'),
+            onChanged: (v) => setState(() => _account = v ?? _account),
             decoration: const InputDecoration(labelText: 'Account', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Amount', border: OutlineInputBorder()),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$')),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Amount',
+              hintText: 'Enter amount (₹)',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -179,7 +219,7 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             value: _category,
-            items: widget.expenseCategories
+            items: activeCategories
                 .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                 .toList(),
             onChanged: (v) {

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import '../utils/text_format.dart';
 
 class MoreTab extends StatelessWidget {
   const MoreTab({
     super.key,
     required this.incomeCategories,
     required this.expenseCategories,
+    required this.activeExpenseCategories,
+    required this.onUpdateArchivedExpenseCategories,
     required this.subcategories,
     required this.budgets,
     required this.onUpdateIncomeCategories,
@@ -13,18 +16,24 @@ class MoreTab extends StatelessWidget {
     required this.onUpdateBudgets,
     required this.selectedThemePalette,
     required this.onThemeChanged,
+    required this.accounts,
+    required this.onUpdateAccounts,
   });
 
   final List<String> incomeCategories;
   final List<String> expenseCategories;
+  final List<String> activeExpenseCategories;
   final Map<String, List<String>> subcategories;
   final Map<String, double> budgets;
   final ValueChanged<List<String>> onUpdateIncomeCategories;
   final ValueChanged<List<String>> onUpdateExpenseCategories;
   final ValueChanged<Map<String, List<String>>> onUpdateSubcategories;
   final ValueChanged<Map<String, double>> onUpdateBudgets;
+  final ValueChanged<Set<String>> onUpdateArchivedExpenseCategories;
   final String selectedThemePalette;
   final ValueChanged<String> onThemeChanged;
+  final List<Map<String, dynamic>> accounts;
+  final ValueChanged<List<Map<String, dynamic>>> onUpdateAccounts;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +41,52 @@ class MoreTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        _SectionTitle(
+          title: 'Accounts',
+          onAdd: () => _addCategoryDialog(
+            context,
+            'account',
+            onAdd: (name) {
+              final updated = [...accounts, {'id': DateTime.now().millisecondsSinceEpoch.toString(), 'name': toTitleCase(name), 'is_active': true}];
+              onUpdateAccounts(updated);
+            },
+          ),
+        ),
+        ...accounts.map((account) => ListTile(
+              title: Text(account['name'].toString()),
+              subtitle: Text(account['is_active'] == true ? 'Active' : 'Inactive'),
+              trailing: Wrap(
+                spacing: 4,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _addCategoryDialog(
+                      context,
+                      'account name',
+                      initial: account['name'].toString(),
+                      onAdd: (name) {
+                        final updated = accounts.map((a) {
+                          if (a['id'].toString() != account['id'].toString()) return a;
+                          return {...a, 'name': toTitleCase(name)};
+                        }).toList();
+                        onUpdateAccounts(updated);
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () {
+                      final updated = accounts.map((a) {
+                        if (a['id'].toString() != account['id'].toString()) return a;
+                        return {...a, 'is_active': false};
+                      }).toList();
+                      onUpdateAccounts(updated);
+                    },
+                  ),
+                ],
+              ),
+            )),
+        const SizedBox(height: 12),
         _SectionTitle(
           title: 'Income Categories',
           onAdd: () => _addCategoryDialog(
@@ -58,21 +113,18 @@ class MoreTab extends StatelessWidget {
             context,
             'expense',
             onAdd: (name) {
-              final updated = [...expenseCategories, name];
+              final updated = [...expenseCategories, toTitleCase(name)];
               onUpdateExpenseCategories(updated);
             },
           ),
         ),
         _ReorderableCategoryList(
-          items: expenseCategories,
+          items: activeExpenseCategories,
           onReorder: onUpdateExpenseCategories,
           onDelete: (name) {
-            final updated = [...expenseCategories]..remove(name);
-            final updatedSub = Map<String, List<String>>.from(subcategories)..remove(name);
-            final updatedBudgets = Map<String, double>.from(budgets)..remove(name);
-            onUpdateExpenseCategories(updated);
-            onUpdateSubcategories(updatedSub);
-            onUpdateBudgets(updatedBudgets);
+            final archived = expenseCategories.where((category) => !activeExpenseCategories.contains(category)).toSet();
+            archived.add(name);
+            onUpdateArchivedExpenseCategories(archived);
           },
         ),
         const SizedBox(height: 12),
@@ -410,8 +462,9 @@ Future<void> _addCategoryDialog(
   BuildContext context,
   String type, {
   required ValueChanged<String> onAdd,
+  String? initial,
 }) async {
-  final controller = TextEditingController();
+  final controller = TextEditingController(text: initial ?? '');
   await showDialog<void>(
     context: context,
     builder: (context) {
@@ -425,7 +478,7 @@ Future<void> _addCategoryDialog(
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
-              final value = controller.text.trim();
+              final value = toTitleCase(controller.text.trim());
               if (value.isNotEmpty) onAdd(value);
               Navigator.pop(context);
             },
@@ -455,7 +508,7 @@ Future<void> _addSubcategoryDialog(
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
           onPressed: () {
-            final value = controller.text.trim();
+            final value = toTitleCase(controller.text.trim());
             if (value.isNotEmpty) onAdd(value);
             Navigator.pop(context);
           },

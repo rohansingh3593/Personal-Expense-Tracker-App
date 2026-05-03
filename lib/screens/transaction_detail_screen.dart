@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/expense_transaction.dart';
+import '../utils/text_format.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
@@ -8,11 +10,13 @@ class TransactionDetailScreen extends StatefulWidget {
     required this.transaction,
     required this.expenseCategories,
     required this.subcategories,
+    required this.accounts,
   });
 
   final ExpenseTransaction transaction;
   final List<String> expenseCategories;
   final Map<String, List<String>> subcategories;
+  final List<String> accounts;
 
   @override
   State<TransactionDetailScreen> createState() => _TransactionDetailScreenState();
@@ -22,6 +26,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   bool _isEditing = true;
 
   late String _type;
+  String _lendingFlow = 'paid';
   late DateTime _dateTime;
   late final TextEditingController _amountController;
   late final TextEditingController _merchantController;
@@ -37,6 +42,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     super.initState();
     final t = widget.transaction;
     _type = t.type;
+    _lendingFlow = t.type == 'Received' || t.type == 'Credit' || t.type == 'received' ? 'received' : 'paid';
     _dateTime = t.date;
     _amountController = TextEditingController(text: t.amount.toStringAsFixed(2));
     _merchantController = TextEditingController(text: t.merchant);
@@ -44,7 +50,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _descriptionController = TextEditingController(
       text: t.description.isEmpty ? t.rawMessage : t.description,
     );
-    _account = t.account;
+    _account = widget.accounts.contains(t.account)
+        ? t.account
+        : (widget.accounts.isEmpty ? t.account : widget.accounts.first);
     _category = widget.expenseCategories.contains(t.category)
         ? t.category
         : (widget.expenseCategories.isEmpty ? 'Others' : widget.expenseCategories.first);
@@ -107,14 +115,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       return;
     }
     final updated = widget.transaction.copyWith(
-      type: _type,
+      type: _category == 'Lending' ? _lendingFlow : _type,
       date: _dateTime,
       account: _account,
       category: _category,
       subcategory: _subcategory,
       amount: amount,
       note: _noteController.text.trim(),
-      merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : _merchantController.text.trim(),
+      merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : toTitleCase(_merchantController.text.trim()),
       description: _descriptionController.text.trim(),
       isBookmarked: _bookmarked,
     );
@@ -154,6 +162,26 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 : null,
           ),
           const SizedBox(height: 10),
+          if (_category == 'Lending')
+            Card(
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    value: 'paid',
+                    groupValue: _lendingFlow,
+                    title: const Text('Paid (You gave money)'),
+                    onChanged: _isEditing ? (v) => setState(() => _lendingFlow = v ?? 'paid') : null,
+                  ),
+                  RadioListTile<String>(
+                    value: 'received',
+                    groupValue: _lendingFlow,
+                    title: const Text('Received (You got money back)'),
+                    onChanged: _isEditing ? (v) => setState(() => _lendingFlow = v ?? 'paid') : null,
+                  ),
+                ],
+              ),
+            ),
+          if (_category == 'Lending') const SizedBox(height: 10),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -189,8 +217,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           DropdownButtonFormField<String>(
             value: _account,
             decoration: const InputDecoration(labelText: 'Account', border: OutlineInputBorder()),
-            items: const ['Cash', 'Bank'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-            onChanged: _isEditing ? (v) => setState(() => _account = v ?? 'Cash') : null,
+            items: widget.accounts.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+            onChanged: _isEditing ? (v) => setState(() => _account = v ?? _account) : null,
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
@@ -222,7 +250,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
             controller: _amountController,
             enabled: _isEditing,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Amount', border: OutlineInputBorder()),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$')),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Amount',
+              hintText: 'Enter amount (₹)',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 10),
           TextField(

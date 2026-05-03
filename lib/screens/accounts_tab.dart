@@ -95,6 +95,26 @@ class AccountsTab extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        const Text('Lending Balances', style: TextStyle(fontWeight: FontWeight.bold)),
+        ..._lendingBalances().entries.map((entry) {
+          final given = entry.value.$1;
+          final returned = entry.value.$2;
+          final remaining = given - returned;
+          final status = remaining <= 0 ? 'Settled' : 'Pending';
+          return Card(
+            child: ListTile(
+              title: Text(entry.key),
+              subtitle: Text(
+                'Total Given: ₹${given.toStringAsFixed(0)}\n'
+                'Total Returned: ₹${returned.toStringAsFixed(0)}\n'
+                'Remaining: ₹${remaining.toStringAsFixed(0)}',
+              ),
+              isThreeLine: true,
+              trailing: Text(status),
+            ),
+          );
+        }),
       ],
     );
   }
@@ -171,6 +191,21 @@ class AccountsTab extends StatelessWidget {
       values.add(total);
     }
     return values;
+  }
+
+  Map<String, (double, double)> _lendingBalances() {
+    final map = <String, (double, double)>{};
+    for (final tx in transactions.where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim().isNotEmpty)) {
+      final person = tx.subcategory!.trim();
+      final current = map[person] ?? (0, 0);
+      if (tx.type == 'Debit' || tx.type == 'Paid' || tx.type == 'paid') {
+        map[person] = (current.$1 + tx.amount, current.$2);
+      } else if (tx.type == 'Credit' || tx.type == 'Received' || tx.type == 'received') {
+        map[person] = (current.$1, current.$2 + tx.amount);
+      }
+    }
+    final entries = map.entries.toList()..sort((a, b) => (b.value.$1 - b.value.$2).compareTo(a.value.$1 - a.value.$2));
+    return {for (final entry in entries) entry.key: entry.value};
   }
 }
 

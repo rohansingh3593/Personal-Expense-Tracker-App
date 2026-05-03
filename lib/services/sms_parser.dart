@@ -1,4 +1,5 @@
 import '../models/expense_transaction.dart';
+import '../utils/text_format.dart';
 
 class ParsedSmsDraft {
   const ParsedSmsDraft({
@@ -127,9 +128,11 @@ class SmsParser {
   }
 
   String _sanitizeMerchant(String merchant) {
-    return merchant
+    return toTitleCase(
+      merchant
         .replaceAll(RegExp(r'\s+on\s+\d{1,2}[-/]\w+.*$', caseSensitive: false), '')
         .replaceAll(RegExp(r'\s+avl.*$', caseSensitive: false), '')
-        .trim();
+        .trim(),
+    );
   }
 }

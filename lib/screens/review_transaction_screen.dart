@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/expense_transaction.dart';
 import '../services/sms_parser.dart';
+import '../utils/text_format.dart';
 
 class ReviewTransactionScreen extends StatefulWidget {
   const ReviewTransactionScreen({
@@ -9,11 +11,13 @@ class ReviewTransactionScreen extends StatefulWidget {
     required this.draft,
     required this.expenseCategories,
     required this.subcategories,
+    required this.accounts,
   });
 
   final ParsedSmsDraft draft;
   final List<String> expenseCategories;
   final Map<String, List<String>> subcategories;
+  final List<String> accounts;
 
   @override
   State<ReviewTransactionScreen> createState() => _ReviewTransactionScreenState();
@@ -27,6 +31,7 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
 
   late DateTime _dateTime;
   late String _type;
+  String _lendingFlow = 'paid';
   late String _account;
   late String _category;
   String? _subcategory;
@@ -43,7 +48,7 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
     _descriptionController = TextEditingController(text: widget.draft.rawMessage);
     _dateTime = widget.draft.date;
     _type = widget.draft.type.toLowerCase() == 'credit' ? 'Credit' : 'Debit';
-    _account = 'Cash';
+    _account = widget.accounts.isEmpty ? 'Cash' : widget.accounts.first;
     _bookmarked = false;
     _category = widget.expenseCategories.contains(widget.draft.category)
         ? widget.draft.category
@@ -107,10 +112,10 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
       id: '${DateTime.now().millisecondsSinceEpoch}-${_merchantController.text.hashCode}',
       amount: amount,
       account: _account,
-      merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : _merchantController.text.trim(),
+      merchant: _merchantController.text.trim().isEmpty ? 'Unknown' : toTitleCase(_merchantController.text.trim()),
       category: _category,
       subcategory: _subcategory,
-      type: _type,
+      type: _category == 'Lending' ? _lendingFlow : _type,
       date: _dateTime,
       note: _noteController.text.trim(),
       description: _descriptionController.text.trim(),
@@ -140,6 +145,26 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
             onSelectionChanged: (value) => setState(() => _type = value.first),
           ),
           const SizedBox(height: 10),
+          if (_category == 'Lending')
+            Card(
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    value: 'paid',
+                    groupValue: _lendingFlow,
+                    title: const Text('Paid (You gave money)'),
+                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'paid'),
+                  ),
+                  RadioListTile<String>(
+                    value: 'received',
+                    groupValue: _lendingFlow,
+                    title: const Text('Received (You got money back)'),
+                    onChanged: (v) => setState(() => _lendingFlow = v ?? 'paid'),
+                  ),
+                ],
+              ),
+            ),
+          if (_category == 'Lending') const SizedBox(height: 10),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -174,17 +199,24 @@ class _ReviewTransactionScreenState extends State<ReviewTransactionScreen> {
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             value: _account,
-            items: const ['Cash', 'Bank']
+            items: widget.accounts
                 .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                 .toList(),
-            onChanged: (v) => setState(() => _account = v ?? 'Cash'),
+            onChanged: (v) => setState(() => _account = v ?? _account),
             decoration: const InputDecoration(labelText: 'Account', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Amount', border: OutlineInputBorder()),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$')),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Amount',
+              hintText: 'Enter amount (₹)',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 10),
           TextField(

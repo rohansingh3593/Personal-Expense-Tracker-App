@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'models/app_data.dart';
@@ -91,19 +92,57 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ExpenseTransaction> get _transactions => _appData.transactions;
   List<String> get _incomeCategories => _appData.incomeCategories;
   List<String> get _expenseCategories => _appData.expenseCategories;
+  Set<String> get _archivedExpenseCategories =>
+      Set<String>.from((_appData.settings['archivedExpenseCategories'] as List?)?.map((e) => e.toString()) ?? const []);
+  List<String> get _activeExpenseCategories =>
+      _expenseCategories.where((category) => !_archivedExpenseCategories.contains(category)).toList();
   Map<String, List<String>> get _subcategories => _appData.subcategories;
   Map<String, double> get _budgets => _appData.budgets;
+  List<Map<String, dynamic>> get _accounts {
+    final raw = _appData.settings['accounts'] as List?;
+    if (raw == null || raw.isEmpty) {
+      return const [
+        {'id': 'cash', 'name': 'Cash', 'is_active': true},
+        {'id': 'bank', 'name': 'Bank', 'is_active': true},
+      ];
+    }
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+  List<String> get _activeAccountNames => _accounts
+      .where((a) => a['is_active'] == true)
+      .map((a) => a['name'].toString())
+      .toList();
   String get _themePalette => (_appData.settings['themePalette'] as String?) ?? 'blue';
 
   Future<void> _loadAppData() async {
     setState(() => _loading = true);
     final loaded = await _repository.load();
+    var changed = false;
+    final normalizedExpenseCategories = List<String>.from(loaded.expenseCategories);
+    if (!normalizedExpenseCategories.contains('Lending')) {
+      normalizedExpenseCategories.add('Lending');
+      changed = true;
+    }
+    final normalizedSubcategories = Map<String, List<String>>.from(loaded.subcategories);
+    if (!normalizedSubcategories.containsKey('Lending')) {
+      normalizedSubcategories['Lending'] = <String>[];
+      changed = true;
+    }
+    final normalized = changed
+        ? loaded.copyWith(
+            expenseCategories: normalizedExpenseCategories,
+            subcategories: normalizedSubcategories,
+          )
+        : loaded;
     if (!mounted) return;
     setState(() {
-      _appData = loaded;
+      _appData = normalized;
       _dataLoaded = true;
       _loading = false;
     });
+    if (changed) {
+      unawaited(_repository.save(normalized));
+    }
     widget.onThemeChanged(_themePalette);
   }
 
@@ -207,10 +246,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextField(
                   controller: amountController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$')),
+                  ],
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     labelText: 'Amount',
-                    hintText: 'e.g. 540.50',
+                    hintText: 'Enter amount (₹)',
                   ),
                 ),
               ],
@@ -296,7 +338,9 @@ class _HomeScreenState extends State<HomeScreen> {
         MaterialPageRoute(
           builder: (_) => ManualAddTransactionScreen(
             expenseCategories: _expenseCategories,
+            archivedExpenseCategories: _archivedExpenseCategories,
             subcategories: _subcategories,
+            accounts: _activeAccountNames,
           ),
         ),
       );
@@ -305,7 +349,9 @@ class _HomeScreenState extends State<HomeScreen> {
         MaterialPageRoute(
           builder: (_) => PasteSmsScreen(
             expenseCategories: _expenseCategories,
+            archivedExpenseCategories: _archivedExpenseCategories,
             subcategories: _subcategories,
+            accounts: _activeAccountNames,
           ),
         ),
       );
@@ -345,11 +391,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddTransactionFlow,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Transaction'),
-      ),
+      floatingActionButton: _tabIndex == 0
+          ? FloatingActionButton.extended(
+              onPressed: _openAddTransactionFlow,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Transaction'),
+            )
+          : null,
       body: _loading || !_dataLoaded
           ? const Center(child: CircularProgressIndicator())
           : !_permissionGranted && !_limitedMode
@@ -383,6 +431,7 @@ class _HomeScreenState extends State<HomeScreen> {
           expenseCategories: _expenseCategories,
           subcategories: _subcategories,
           onTransactionUpdated: _updateTransaction,
+          accounts: _activeAccountNames,
         );
       case 1:
         return StatsTab(transactions: _transactions);
@@ -395,6 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return MoreTab(
           incomeCategories: _incomeCategories,
           expenseCategories: _expenseCategories,
+          activeExpenseCategories: _activeExpenseCategories,
           subcategories: _subcategories,
           budgets: _budgets,
           onUpdateIncomeCategories: (value) {
@@ -402,7 +452,13 @@ class _HomeScreenState extends State<HomeScreen> {
             _persistAppData();
           },
           onUpdateExpenseCategories: (value) {
-            setState(() => _appData = _appData.copyWith(expenseCategories: List<String>.from(value)));
+            final merged = [
+              ...value,
+              ..._expenseCategories.where(
+                (category) => _archivedExpenseCategories.contains(category) && !value.contains(category),
+              ),
+            ];
+            setState(() => _appData = _appData.copyWith(expenseCategories: List<String>.from(merged)));
             _persistAppData();
           },
           onUpdateSubcategories: (value) {
@@ -413,8 +469,21 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() => _appData = _appData.copyWith(budgets: value));
             _persistAppData();
           },
+          onUpdateArchivedExpenseCategories: (value) {
+            final updatedSettings = Map<String, dynamic>.from(_appData.settings);
+            updatedSettings['archivedExpenseCategories'] = value.toList()..sort();
+            setState(() => _appData = _appData.copyWith(settings: updatedSettings));
+            _persistAppData();
+          },
           selectedThemePalette: _themePalette,
           onThemeChanged: _updateThemePalette,
+          accounts: _accounts,
+          onUpdateAccounts: (accounts) {
+            final updatedSettings = Map<String, dynamic>.from(_appData.settings);
+            updatedSettings['accounts'] = accounts;
+            setState(() => _appData = _appData.copyWith(settings: updatedSettings));
+            _persistAppData();
+          },
         );
       default:
         return const SizedBox.shrink();

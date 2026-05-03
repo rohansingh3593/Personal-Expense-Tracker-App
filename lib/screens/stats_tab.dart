@@ -17,30 +17,37 @@ class StatsTab extends StatefulWidget {
 class _StatsTabState extends State<StatsTab> {
   StatsRange _range = StatsRange.monthly;
   DateTimeRange? _customRange;
+  String? _selectedCategory;
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final range = _resolveRange(now);
     final txInRange = widget.transactions
-        .where((t) => t.type == 'Debit')
+        .where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))
         .where((t) => !t.date.isBefore(range.start) && !t.date.isAfter(range.end))
         .toList();
 
     final categorySpend = <String, double>{};
     for (final tx in txInRange) {
-      categorySpend.update(tx.category, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
+      categorySpend.update(tx.category, (v) => v + signed, ifAbsent: () => signed);
     }
-    final total = txInRange.fold<double>(0, (s, t) => s + t.amount);
+    final lendingOwes = _lendingRemaining(txInRange);
+    final spendingByAccount = <String, double>{};
+    for (final tx in txInRange.where((t) => _isOutgoingType(t.type))) {
+      spendingByAccount.update(tx.account, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+    }
+    final total = txInRange.fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
 
     final prevRange = DateTimeRange(
       start: range.start.subtract(range.duration),
       end: range.start,
     );
     final prevTotal = widget.transactions
-        .where((t) => t.type == 'Debit')
+        .where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))
         .where((t) => !t.date.isBefore(prevRange.start) && t.date.isBefore(prevRange.end))
-        .fold<double>(0, (s, t) => s + t.amount);
+        .fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
 
     final diffPct = prevTotal <= 0 ? null : ((total - prevTotal) / prevTotal) * 100;
 
@@ -102,26 +109,80 @@ class _StatsTabState extends State<StatsTab> {
         if (categorySpend.isNotEmpty) const SizedBox(height: 8),
         ...categorySpend.entries.map((entry) {
           final double pct = total <= 0 ? 0.0 : entry.value / total;
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: Text(entry.key)),
-                      Text('\u20B9${entry.value.toStringAsFixed(0)} (${(pct * 100).toStringAsFixed(0)}%)'),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  LinearProgressIndicator(value: pct),
-                ],
+          return InkWell(
+            onTap: () => setState(() => _selectedCategory = entry.key),
+            child: Card(
+              color: _selectedCategory == entry.key ? Theme.of(context).colorScheme.surfaceVariant : null,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(entry.key)),
+                        Text('\u20B9${entry.value.toStringAsFixed(0)} (${(pct * 100).toStringAsFixed(0)}%)'),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(value: pct),
+                  ],
+                ),
               ),
             ),
           );
         }),
+        if (_selectedCategory != null) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${_selectedCategory!} Subcategories',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(() => _selectedCategory = null),
+                child: const Text('Back'),
+              ),
+            ],
+          ),
+          _SubcategoryBreakdown(
+            category: _selectedCategory!,
+            transactions: txInRange,
+            onSelectPerson: (person) => _openPersonDetail(person),
+          ),
+        ],
         const SizedBox(height: 10),
+        if (lendingOwes.isNotEmpty) ...[
+          const Text('Lending by Person (Remaining)', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          SizedBox(height: 220, child: _PieChartCard(data: lendingOwes)),
+          ...lendingOwes.entries.map((entry) => ListTile(
+                dense: true,
+                title: Text(entry.key),
+                trailing: Text('₹${entry.value.toStringAsFixed(0)}'),
+                onTap: () => _openPersonDetail(entry.key),
+              )),
+          const SizedBox(height: 10),
+        ],
+        if (spendingByAccount.isNotEmpty) ...[
+          const Text('Spending by Account', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          SizedBox(height: 220, child: _PieChartCard(data: spendingByAccount)),
+          ...spendingByAccount.entries.map((entry) {
+            final pct = spendingByAccount.values.fold<double>(0, (a, b) => a + b) <= 0
+                ? 0
+                : (entry.value / spendingByAccount.values.fold<double>(0, (a, b) => a + b)) * 100;
+            return ListTile(
+              dense: true,
+              title: Text(entry.key),
+              trailing: Text('₹${entry.value.toStringAsFixed(0)} (${pct.toStringAsFixed(0)}%)'),
+            );
+          }),
+          const SizedBox(height: 10),
+        ],
         const Text('Monthly Spending Trend', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         ..._monthTrend(widget.transactions).entries.toList().reversed.take(12).map(
@@ -151,13 +212,50 @@ class _StatsTabState extends State<StatsTab> {
 
   Map<String, double> _monthTrend(List<ExpenseTransaction> transactions) {
     final result = <String, double>{};
-    for (final tx in transactions.where((t) => t.type == 'Debit')) {
+    for (final tx in transactions.where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))) {
       final key = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}';
-      result.update(key, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
+      result.update(key, (v) => v + signed, ifAbsent: () => signed);
     }
     return result;
   }
+
+  Map<String, double> _lendingRemaining(List<ExpenseTransaction> txInRange) {
+    final given = <String, double>{};
+    final returned = <String, double>{};
+    for (final tx in txInRange.where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim().isNotEmpty)) {
+      final person = tx.subcategory!.trim();
+      if (tx.type == 'Debit' || tx.type == 'Paid' || tx.type == 'paid') {
+        given.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      } else if (tx.type == 'Credit' || tx.type == 'Received' || tx.type == 'received') {
+        returned.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      }
+    }
+    final result = <String, double>{};
+    for (final person in {...given.keys, ...returned.keys}) {
+      final remaining = (given[person] ?? 0) - (returned[person] ?? 0);
+      if (remaining > 0) result[person] = remaining;
+    }
+    return result;
+  }
+
+  void _openPersonDetail(String person) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _LendingPersonDetailScreen(
+          person: person,
+          transactions: widget.transactions,
+        ),
+      ),
+    );
+  }
 }
+
+bool _isOutgoingType(String type) =>
+    type == 'Debit' || type == 'Paid' || type == 'paid';
+
+bool _isIncomingType(String type) =>
+    type == 'Credit' || type == 'Received' || type == 'received';
 
 class _PieChartCard extends StatelessWidget {
   const _PieChartCard({required this.data});
@@ -269,4 +367,113 @@ class _PieChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PieChartPainter oldDelegate) =>
       oldDelegate.values != values || oldDelegate.colors != colors || oldDelegate.borderColor != borderColor;
+}
+
+class _SubcategoryBreakdown extends StatelessWidget {
+  const _SubcategoryBreakdown({
+    required this.category,
+    required this.transactions,
+    required this.onSelectPerson,
+  });
+
+  final String category;
+  final List<ExpenseTransaction> transactions;
+  final ValueChanged<String> onSelectPerson;
+
+  @override
+  Widget build(BuildContext context) {
+    final grouped = <String, double>{};
+    for (final tx in transactions.where((t) => t.category == category)) {
+      final sub = (tx.subcategory ?? 'Uncategorized').trim().isEmpty ? 'Uncategorized' : tx.subcategory!.trim();
+      grouped.update(sub, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+    }
+    final total = grouped.values.fold<double>(0, (a, b) => a + b);
+    final sorted = grouped.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    if (sorted.isEmpty) return const Text('No subcategory data.');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Total: ₹${total.toStringAsFixed(0)}'),
+        const SizedBox(height: 6),
+        SizedBox(height: 220, child: _PieChartCard(data: grouped)),
+        ...sorted.map((entry) {
+          final pct = total <= 0 ? 0 : (entry.value / total) * 100;
+          return ListTile(
+            dense: true,
+            title: Text(entry.key),
+            trailing: Text('₹${entry.value.toStringAsFixed(0)} (${pct.toStringAsFixed(0)}%)'),
+            onTap: category == 'Lending' ? () => onSelectPerson(entry.key) : null,
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class _LendingPersonDetailScreen extends StatelessWidget {
+  const _LendingPersonDetailScreen({
+    required this.person,
+    required this.transactions,
+  });
+
+  final String person;
+  final List<ExpenseTransaction> transactions;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = transactions
+        .where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim() == person)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    var paid = 0.0;
+    var received = 0.0;
+    for (final tx in items) {
+      if (tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit') {
+        paid += tx.amount;
+      } else if (tx.type == 'Received' || tx.type == 'received' || tx.type == 'Credit') {
+        received += tx.amount;
+      }
+    }
+    final pending = paid - received;
+    return Scaffold(
+      appBar: AppBar(title: Text(person)),
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(person, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  Text('Paid: ₹${paid.toStringAsFixed(0)}'),
+                  Text('Received: ₹${received.toStringAsFixed(0)}'),
+                  Text('Pending: ₹${pending.toStringAsFixed(0)}'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text('History', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          if (items.isEmpty) const Text('No lending transactions for this person.'),
+          ...items.map((tx) {
+            final isPaid = tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit';
+            final label = isPaid ? 'Paid' : 'Received';
+            return ListTile(
+              dense: true,
+              title: Text('${tx.date.day}/${tx.date.month}/${tx.date.year}'),
+              trailing: Text(
+                '${isPaid ? '-' : '+'}₹${tx.amount.toStringAsFixed(0)}',
+                style: TextStyle(color: isPaid ? Colors.red : Colors.green, fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text('$label ₹${tx.amount.toStringAsFixed(0)}'),
+            );
+          }),
+        ],
+      ),
+    );
+  }
 }
