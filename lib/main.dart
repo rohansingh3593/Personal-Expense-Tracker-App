@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'models/app_data.dart';
@@ -245,10 +246,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextField(
                   controller: amountController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$')),
+                  ],
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     labelText: 'Amount',
-                    hintText: 'e.g. 540.50',
+                    hintText: 'Enter amount (₹)',
                   ),
                 ),
               ],

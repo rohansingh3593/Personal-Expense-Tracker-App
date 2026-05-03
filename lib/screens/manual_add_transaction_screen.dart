@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/expense_transaction.dart';
 import '../utils/text_format.dart';
@@ -201,7 +202,14 @@ class _ManualAddTransactionScreenState extends State<ManualAddTransactionScreen>
           TextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Amount', border: OutlineInputBorder()),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$')),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Amount',
+              hintText: 'Enter amount (₹)',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 10),
           TextField(
