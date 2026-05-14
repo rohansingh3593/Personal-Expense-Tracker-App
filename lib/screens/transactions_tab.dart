@@ -226,29 +226,19 @@ class _DailyListView extends StatelessWidget {
     List<ExpenseTransaction> transactions,
     DateTime now,
   ) {
-    final groups = <String, List<ExpenseTransaction>>{
-      'Today': <ExpenseTransaction>[],
-      'Yesterday': <ExpenseTransaction>[],
-      'This Week': <ExpenseTransaction>[],
-      'Older': <ExpenseTransaction>[],
-    };
-
+    final groups = <String, List<ExpenseTransaction>>{};
     final sorted = [...transactions]..sort((a, b) => b.date.compareTo(a.date));
     final today = _dateOnly(now);
     final yesterday = today.subtract(const Duration(days: 1));
-    final weekStart = today.subtract(const Duration(days: 7));
 
     for (final tx in sorted) {
       final txDate = _dateOnly(tx.date);
-      if (txDate == today) {
-        groups['Today']!.add(tx);
-      } else if (txDate == yesterday) {
-        groups['Yesterday']!.add(tx);
-      } else if (!txDate.isBefore(weekStart) && txDate.isBefore(yesterday)) {
-        groups['This Week']!.add(tx);
-      } else {
-        groups['Older']!.add(tx);
-      }
+      final label = txDate == today
+          ? 'Today'
+          : txDate == yesterday
+              ? 'Yesterday'
+              : _formatSectionDate(txDate);
+      groups.putIfAbsent(label, () => <ExpenseTransaction>[]).add(tx);
     }
 
     return groups;
@@ -564,6 +554,10 @@ class _YearlyAllTimeView extends StatelessWidget {
 DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
 bool _isSameDate(DateTime a, DateTime b) => _dateOnly(a) == _dateOnly(b);
+
+String _formatSectionDate(DateTime date) {
+  return '${date.day} ${_monthName(date.month)} ${date.year}';
+}
 
 String _monthName(int month) {
   const names = [
