@@ -81,6 +81,11 @@ If release build fails with `Task 'assembleSafeRelease' not found`, your project
    ./scripts/build_release.sh
    ```
    It auto-detects whether flavor `safe` exists and runs the correct Flutter build command.
+   
+   On Windows (Command Prompt):
+   ```bat
+   scripts\build_release.bat
+   ```
 
 Also ensure this code is inside a full Flutter scaffold (`android/`, `ios/`, etc.). If missing, run:
 
