@@ -200,9 +200,20 @@ class _DailyListView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    section.key,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          section.key,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (section.value.length > 1)
+                        Text(
+                          '₹${section.value.fold<double>(0, (sum, tx) => sum + tx.amount).toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   ...section.value.map(
