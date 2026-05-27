@@ -76,19 +76,28 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  List<ExpenseTransaction> _selectedMonthTx() {
+  List<ExpenseTransaction> _sortedTransactions() {
     return widget.transactions
         .where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))
-        .where((t) => t.date.year == _selectedMonth.year && t.date.month == _selectedMonth.month)
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  List<ExpenseTransaction> _selectedMonthTx() {
+    return _sortedTransactions()
+        .where(
+          (t) =>
+              t.date.year == _selectedMonth.year &&
+              t.date.month == _selectedMonth.month,
+        )
+        .toList();
   }
 
   Widget _buildModeContent() {
     switch (_mode) {
       case TransactionViewMode.daily:
         return _DailyListView(
-          transactions: _selectedMonthTx(),
+          transactions: _sortedTransactions(),
           expenseCategories: widget.expenseCategories,
           subcategories: widget.subcategories,
           onTransactionUpdated: widget.onTransactionUpdated,
@@ -104,16 +113,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
       case TransactionViewMode.monthly:
         return _MonthlySummaryView(
           currentMonthTx: _selectedMonthTx(),
-          previousMonthTx: widget.transactions.where((t) {
+          previousMonthTx: _sortedTransactions().where((t) {
             final prev = DateTime(_selectedMonth.year, _selectedMonth.month - 1);
-            return (_isOutgoingType(t.type) || _isIncomingType(t.type)) && t.date.year == prev.year && t.date.month == prev.month;
+            return t.date.year == prev.year && t.date.month == prev.month;
           }).toList(),
           budgets: widget.budgets,
         );
       case TransactionViewMode.yearly:
-        return _YearlyAllTimeView(
-          transactions: widget.transactions.where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type)).toList(),
-        );
+        return _YearlyAllTimeView(transactions: _sortedTransactions());
     }
   }
 }
@@ -176,80 +183,129 @@ class _DailyListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (transactions.isEmpty) return const Center(child: Text('No transactions in this month.'));
-
-    final grouped = <String, List<ExpenseTransaction>>{};
-    for (final tx in transactions) {
-      final key = '${tx.date.year}-${tx.date.month}-${tx.date.day}';
-      grouped.putIfAbsent(key, () => []).add(tx);
+    if (transactions.isEmpty) {
+      return const Center(child: Text('No transactions yet.'));
     }
-    final keys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
 
-    return ListView.builder(
-      itemCount: keys.length,
-      itemBuilder: (context, index) {
-        final key = keys[index];
-        final txs = grouped[key]!;
-        final date = txs.first.date;
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${date.day} ${_monthName(date.month)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                ...txs.map(
-                  (tx) => InkWell(
-                    onTap: () async {
-                      final updated = await Navigator.of(context).push<ExpenseTransaction>(
-                        MaterialPageRoute(
-                          builder: (_) => TransactionDetailScreen(
-                            transaction: tx,
-                            expenseCategories: expenseCategories,
-                            subcategories: subcategories,
-                            accounts: accounts,
-                          ),
-                        ),
-                      );
-                      if (updated != null) {
-                        onTransactionUpdated(updated);
-                      }
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(tx.merchant),
-                                Text(
-                                  _formatTime(tx.date),
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            '${_isIncomingType(tx.type) ? '+' : '-'}\u20B9${tx.amount.toStringAsFixed(2)}',
-                            style: TextStyle(color: _isIncomingType(tx.type) ? Colors.green : Colors.red),
-                          ),
-                        ],
-                      ),
+    final grouped = _groupTransactions(transactions, DateTime.now());
+    final sections = grouped.entries.where((entry) => entry.value.isNotEmpty);
+
+    return ListView(
+      children: [
+        for (final section in sections)
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    section.key,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  ...section.value.map(
+                    (tx) => _TransactionRow(
+                      transaction: tx,
+                      expenseCategories: expenseCategories,
+                      subcategories: subcategories,
+                      accounts: accounts,
+                      onTransactionUpdated: onTransactionUpdated,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Map<String, List<ExpenseTransaction>> _groupTransactions(
+    List<ExpenseTransaction> transactions,
+    DateTime now,
+  ) {
+    final groups = <String, List<ExpenseTransaction>>{};
+    final sorted = [...transactions]..sort((a, b) => b.date.compareTo(a.date));
+    final today = _dateOnly(now);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    for (final tx in sorted) {
+      final txDate = _dateOnly(tx.date);
+      final label = txDate == today
+          ? 'Today'
+          : txDate == yesterday
+              ? 'Yesterday'
+              : _formatSectionDate(txDate);
+      groups.putIfAbsent(label, () => <ExpenseTransaction>[]).add(tx);
+    }
+
+    return groups;
+  }
+}
+
+class _TransactionRow extends StatelessWidget {
+  const _TransactionRow({
+    required this.transaction,
+    required this.expenseCategories,
+    required this.subcategories,
+    required this.accounts,
+    required this.onTransactionUpdated,
+  });
+
+  final ExpenseTransaction transaction;
+  final List<String> expenseCategories;
+  final Map<String, List<String>> subcategories;
+  final List<String> accounts;
+  final ValueChanged<ExpenseTransaction> onTransactionUpdated;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () async {
+        final updated = await Navigator.of(context).push<ExpenseTransaction>(
+          MaterialPageRoute(
+            builder: (_) => TransactionDetailScreen(
+              transaction: transaction,
+              expenseCategories: expenseCategories,
+              subcategories: subcategories,
+              accounts: accounts,
             ),
           ),
         );
+        if (updated != null) {
+          onTransactionUpdated(updated);
+        }
       },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(transaction.merchant),
+                  Text(
+                    _formatTime(transaction.date),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              '${_isIncomingType(transaction.type) ? '+' : '-'}'
+              '\u20B9${transaction.amount.toStringAsFixed(2)}',
+              style: TextStyle(
+                color: _isIncomingType(transaction.type)
+                    ? Colors.green
+                    : Colors.red,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -280,7 +336,10 @@ class _CalendarView extends StatelessWidget {
 
     final selectedList = selectedDate == null
         ? const <ExpenseTransaction>[]
-        : transactions.where((t) => t.date.day == selectedDate!.day).toList();
+        : (transactions
+            .where((t) => _isSameDate(t.date, selectedDate!))
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date)));
 
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -308,7 +367,10 @@ class _CalendarView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('$dayNumber', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        '$dayNumber',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       const Spacer(),
                       if (spend > 0)
                         Text(
@@ -335,7 +397,10 @@ class _CalendarView extends StatelessWidget {
               dense: true,
               title: Text(tx.merchant),
               subtitle: Text(_formatTime(tx.date)),
-              trailing: Text('${_isIncomingType(tx.type) ? '+' : '-'}\u20B9${tx.amount.toStringAsFixed(2)}'),
+              trailing: Text(
+                '${_isIncomingType(tx.type) ? '+' : '-'}'
+                '\u20B9${tx.amount.toStringAsFixed(2)}',
+              ),
             ),
           ),
         ],
@@ -357,8 +422,14 @@ class _MonthlySummaryView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = currentMonthTx.fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
-    final prevTotal = previousMonthTx.fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
+    final total = currentMonthTx.fold<double>(
+      0,
+      (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount),
+    );
+    final prevTotal = previousMonthTx.fold<double>(
+      0,
+      (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount),
+    );
 
     final categorySpend = <String, double>{};
     for (final tx in currentMonthTx) {
@@ -394,7 +465,9 @@ class _MonthlySummaryView extends StatelessWidget {
         ...entries.map(
           (entry) {
             final budget = budgets[entry.key];
-            final usedPct = budget == null || budget <= 0 ? null : min(1.0, entry.value / budget);
+            final usedPct = budget == null || budget <= 0
+                ? null
+                : min(1.0, entry.value / budget);
             return Card(
               child: Padding(
                 padding: const EdgeInsets.all(10),
@@ -412,7 +485,8 @@ class _MonthlySummaryView extends StatelessWidget {
                       LinearProgressIndicator(value: usedPct),
                       const SizedBox(height: 4),
                       Text(
-                        'Budget: \u20B9${entry.value.toStringAsFixed(0)} / \u20B9${budget.toStringAsFixed(0)}',
+                        'Budget: \u20B9${entry.value.toStringAsFixed(0)} / '
+                        '\u20B9${budget.toStringAsFixed(0)}',
                       ),
                     ],
                   ],
@@ -450,7 +524,10 @@ class _YearlyAllTimeView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        const Text('Year-wise trends', style: TextStyle(fontWeight: FontWeight.bold)),
+        const Text(
+          'Year-wise trends',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         ...yearEntries.map(
           (e) => ListTile(
             title: Text('${e.key}'),
@@ -458,7 +535,10 @@ class _YearlyAllTimeView extends StatelessWidget {
           ),
         ),
         const Divider(),
-        const Text('Month-wise totals', style: TextStyle(fontWeight: FontWeight.bold)),
+        const Text(
+          'Month-wise totals',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         ...monthEntries.take(24).map(
           (e) => ListTile(
             dense: true,
@@ -469,6 +549,14 @@ class _YearlyAllTimeView extends StatelessWidget {
       ],
     );
   }
+}
+
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+bool _isSameDate(DateTime a, DateTime b) => _dateOnly(a) == _dateOnly(b);
+
+String _formatSectionDate(DateTime date) {
+  return '${date.day} ${_monthName(date.month)} ${date.year}';
 }
 
 String _monthName(int month) {

@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
 import 'dart:math';
+
+import 'package:flutter/material.dart';
 
 import '../models/expense_transaction.dart';
 
-enum StatsRange { weekly, monthly, yearly, custom }
+enum StatsRange { overall, weekly, monthly, yearly, custom }
 
 class StatsTab extends StatefulWidget {
   const StatsTab({super.key, required this.transactions});
@@ -15,7 +16,7 @@ class StatsTab extends StatefulWidget {
 }
 
 class _StatsTabState extends State<StatsTab> {
-  StatsRange _range = StatsRange.monthly;
+  StatsRange _range = StatsRange.overall;
   DateTimeRange? _customRange;
   String? _selectedCategory;
 
@@ -23,33 +24,53 @@ class _StatsTabState extends State<StatsTab> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final range = _resolveRange(now);
-    final txInRange = widget.transactions
-        .where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))
-        .where((t) => !t.date.isBefore(range.start) && !t.date.isAfter(range.end))
-        .toList();
+    final txInRange = _transactionsForRange(range);
 
-    final categorySpend = <String, double>{};
-    for (final tx in txInRange) {
-      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
-      categorySpend.update(tx.category, (v) => v + signed, ifAbsent: () => signed);
-    }
+    final totalIncome = txInRange
+        .where((t) => _isIncomingType(t.type) && t.category != 'Lending')
+        .fold<double>(0, (s, t) => s + t.amount);
+    final totalExpense = txInRange
+        .where((t) => _isOutgoingType(t.type) && t.category != 'Lending')
+        .fold<double>(0, (s, t) => s + t.amount);
+    final totalLending = txInRange
+        .where((t) => _isOutgoingType(t.type) && t.category == 'Lending')
+        .fold<double>(0, (s, t) => s + t.amount);
+    final totalReceived = txInRange
+        .where((t) => _isIncomingType(t.type) && t.category == 'Lending')
+        .fold<double>(0, (s, t) => s + t.amount);
+
+    final categorySpend = _categorySpend(txInRange);
+    final totalCategorySpend =
+        categorySpend.values.fold<double>(0, (s, v) => s + v);
     final lendingOwes = _lendingRemaining(txInRange);
     final spendingByAccount = <String, double>{};
     for (final tx in txInRange.where((t) => _isOutgoingType(t.type))) {
-      spendingByAccount.update(tx.account, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+      spendingByAccount.update(
+        tx.account,
+        (v) => v + tx.amount,
+        ifAbsent: () => tx.amount,
+      );
     }
-    final total = txInRange.fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
+    final accountSpendTotal =
+        spendingByAccount.values.fold<double>(0, (a, b) => a + b);
+    final trendEntries = _monthTrend(txInRange).entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
 
-    final prevRange = DateTimeRange(
-      start: range.start.subtract(range.duration),
-      end: range.start,
-    );
-    final prevTotal = widget.transactions
-        .where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))
-        .where((t) => !t.date.isBefore(prevRange.start) && t.date.isBefore(prevRange.end))
-        .fold<double>(0, (s, t) => s + (_isIncomingType(t.type) ? -t.amount : t.amount));
-
-    final diffPct = prevTotal <= 0 ? null : ((total - prevTotal) / prevTotal) * 100;
+    final prevTotal = range == null
+        ? 0.0
+        : _transactionsForRange(
+            DateTimeRange(
+              start: range.start.subtract(range.duration),
+              end: range.start,
+            ),
+            inclusiveEnd: false,
+          )
+            .where((t) => _isOutgoingType(t.type))
+            .fold<double>(0, (s, t) => s + t.amount);
+    final selectedSpend = totalExpense + totalLending;
+    final diffPct = range == null || prevTotal <= 0
+        ? null
+        : ((selectedSpend - prevTotal) / prevTotal) * 100;
 
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -60,10 +81,26 @@ class _StatsTabState extends State<StatsTab> {
             DropdownButton<StatsRange>(
               value: _range,
               items: const [
-                DropdownMenuItem(value: StatsRange.weekly, child: Text('Weekly')),
-                DropdownMenuItem(value: StatsRange.monthly, child: Text('Monthly')),
-                DropdownMenuItem(value: StatsRange.yearly, child: Text('Yearly')),
-                DropdownMenuItem(value: StatsRange.custom, child: Text('Custom')),
+                DropdownMenuItem(
+                  value: StatsRange.overall,
+                  child: Text('Overall'),
+                ),
+                DropdownMenuItem(
+                  value: StatsRange.weekly,
+                  child: Text('Weekly'),
+                ),
+                DropdownMenuItem(
+                  value: StatsRange.monthly,
+                  child: Text('Monthly'),
+                ),
+                DropdownMenuItem(
+                  value: StatsRange.yearly,
+                  child: Text('Yearly'),
+                ),
+                DropdownMenuItem(
+                  value: StatsRange.custom,
+                  child: Text('Custom'),
+                ),
               ],
               onChanged: (value) async {
                 if (value == null) return;
@@ -76,7 +113,18 @@ class _StatsTabState extends State<StatsTab> {
                   if (picked != null) {
                     setState(() {
                       _range = value;
-                      _customRange = picked;
+                      _customRange = DateTimeRange(
+                        start: picked.start,
+                        end: DateTime(
+                          picked.end.year,
+                          picked.end.month,
+                          picked.end.day,
+                          23,
+                          59,
+                          59,
+                          999,
+                        ),
+                      );
                     });
                   }
                   return;
@@ -91,14 +139,27 @@ class _StatsTabState extends State<StatsTab> {
           child: ListTile(
             title: const Text('Insights'),
             subtitle: Text(
-              diffPct == null
-                  ? 'Not enough previous data.'
-                  : 'You spent ${diffPct.abs().toStringAsFixed(1)}% ${diffPct >= 0 ? 'more' : 'less'} than previous period.',
+              _range == StatsRange.overall
+                  ? 'Showing complete account history with no date filter.'
+                  : diffPct == null
+                      ? 'Not enough previous data.'
+                      : 'You spent ${diffPct.abs().toStringAsFixed(1)}% '
+                          '${diffPct >= 0 ? 'more' : 'less'} than previous period.',
             ),
           ),
         ),
         const SizedBox(height: 10),
-        const Text('Category Distribution', style: TextStyle(fontWeight: FontWeight.bold)),
+        _StatsTotalsGrid(
+          totalIncome: totalIncome,
+          totalExpense: totalExpense,
+          totalLending: totalLending,
+          totalReceived: totalReceived,
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'Category Distribution',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 6),
         if (categorySpend.isEmpty) const Text('No data for selected range.'),
         if (categorySpend.isNotEmpty)
@@ -108,11 +169,15 @@ class _StatsTabState extends State<StatsTab> {
           ),
         if (categorySpend.isNotEmpty) const SizedBox(height: 8),
         ...categorySpend.entries.map((entry) {
-          final double pct = total <= 0 ? 0.0 : entry.value / total;
+          final double pct = totalCategorySpend <= 0
+              ? 0.0
+              : entry.value / totalCategorySpend;
           return InkWell(
             onTap: () => setState(() => _selectedCategory = entry.key),
             child: Card(
-              color: _selectedCategory == entry.key ? Theme.of(context).colorScheme.surfaceVariant : null,
+              color: _selectedCategory == entry.key
+                  ? Theme.of(context).colorScheme.surfaceVariant
+                  : null,
               child: Padding(
                 padding: const EdgeInsets.all(10),
                 child: Column(
@@ -121,7 +186,10 @@ class _StatsTabState extends State<StatsTab> {
                     Row(
                       children: [
                         Expanded(child: Text(entry.key)),
-                        Text('\u20B9${entry.value.toStringAsFixed(0)} (${(pct * 100).toStringAsFixed(0)}%)'),
+                        Text(
+                          '\u20B9${entry.value.toStringAsFixed(0)} '
+                          '(${(pct * 100).toStringAsFixed(0)}%)',
+                        ),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -156,7 +224,10 @@ class _StatsTabState extends State<StatsTab> {
         ],
         const SizedBox(height: 10),
         if (lendingOwes.isNotEmpty) ...[
-          const Text('Lending by Person (Remaining)', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text(
+            'Lending by Person (Remaining)',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 6),
           SizedBox(height: 220, child: _PieChartCard(data: lendingOwes)),
           ...lendingOwes.entries.map((entry) => ListTile(
@@ -168,67 +239,154 @@ class _StatsTabState extends State<StatsTab> {
           const SizedBox(height: 10),
         ],
         if (spendingByAccount.isNotEmpty) ...[
-          const Text('Spending by Account', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text(
+            'Spending by Account',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 6),
           SizedBox(height: 220, child: _PieChartCard(data: spendingByAccount)),
           ...spendingByAccount.entries.map((entry) {
-            final pct = spendingByAccount.values.fold<double>(0, (a, b) => a + b) <= 0
+            final pct = accountSpendTotal <= 0
                 ? 0
-                : (entry.value / spendingByAccount.values.fold<double>(0, (a, b) => a + b)) * 100;
+                : (entry.value / accountSpendTotal) * 100;
             return ListTile(
               dense: true,
               title: Text(entry.key),
-              trailing: Text('₹${entry.value.toStringAsFixed(0)} (${pct.toStringAsFixed(0)}%)'),
+              trailing: Text(
+                '₹${entry.value.toStringAsFixed(0)} '
+                '(${pct.toStringAsFixed(0)}%)',
+              ),
             );
           }),
           const SizedBox(height: 10),
         ],
-        const Text('Monthly Spending Trend', style: TextStyle(fontWeight: FontWeight.bold)),
+        const Text(
+          'Monthly Spending Trend',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 6),
-        ..._monthTrend(widget.transactions).entries.toList().reversed.take(12).map(
-              (entry) => ListTile(
-                dense: true,
-                title: Text(entry.key),
-                trailing: Text('\u20B9${entry.value.toStringAsFixed(0)}'),
-              ),
-            ),
+        if (trendEntries.isEmpty)
+          const Text('No trend data for selected range.'),
+        ...trendEntries.map(
+          (entry) => ListTile(
+            dense: true,
+            title: Text(entry.key),
+            trailing: Text('\u20B9${entry.value.toStringAsFixed(0)}'),
+          ),
+        ),
       ],
     );
   }
 
-  DateTimeRange _resolveRange(DateTime now) {
-    if (_range == StatsRange.custom && _customRange != null) return _customRange!;
+  DateTimeRange? _resolveRange(DateTime now) {
+    if (_range == StatsRange.custom && _customRange != null) {
+      return _customRange!;
+    }
     switch (_range) {
+      case StatsRange.overall:
+        return null;
       case StatsRange.weekly:
-        return DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now);
+        final today = DateTime(now.year, now.month, now.day);
+        final startOfWeek = today.subtract(
+          Duration(days: today.weekday - DateTime.monday),
+        );
+        return DateTimeRange(start: startOfWeek, end: now);
       case StatsRange.monthly:
         return DateTimeRange(start: DateTime(now.year, now.month, 1), end: now);
       case StatsRange.yearly:
         return DateTimeRange(start: DateTime(now.year, 1, 1), end: now);
       case StatsRange.custom:
-        return DateTimeRange(start: now.subtract(const Duration(days: 30)), end: now);
+        return DateTimeRange(
+          start: now.subtract(const Duration(days: 30)),
+          end: now,
+        );
     }
   }
 
-  Map<String, double> _monthTrend(List<ExpenseTransaction> transactions) {
+  List<ExpenseTransaction> _transactionsForRange(
+    DateTimeRange? range, {
+    bool inclusiveEnd = true,
+  }) {
+    final transactions = widget.transactions.where(
+      (t) => _isOutgoingType(t.type) || _isIncomingType(t.type),
+    );
+    if (range == null) return transactions.toList();
+
+    return transactions.where((t) {
+      final isAfterStart = !t.date.isBefore(range.start);
+      final isBeforeEnd = inclusiveEnd
+          ? !t.date.isAfter(range.end)
+          : t.date.isBefore(range.end);
+      return isAfterStart && isBeforeEnd;
+    }).toList();
+  }
+
+  Map<String, double> _categorySpend(List<ExpenseTransaction> transactions) {
     final result = <String, double>{};
-    for (final tx in transactions.where((t) => _isOutgoingType(t.type) || _isIncomingType(t.type))) {
-      final key = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}';
-      final signed = _isIncomingType(tx.type) ? -tx.amount : tx.amount;
-      result.update(key, (v) => v + signed, ifAbsent: () => signed);
+    for (final tx in transactions.where((t) => _isOutgoingType(t.type))) {
+      result.update(
+        tx.category,
+        (v) => v + tx.amount,
+        ifAbsent: () => tx.amount,
+      );
+    }
+    return Map.fromEntries(
+      result.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
+    );
+  }
+
+  Map<String, double> _monthTrend(List<ExpenseTransaction> transactions) {
+    final outgoingTransactions = transactions
+        .where((t) => _isOutgoingType(t.type))
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    if (outgoingTransactions.isEmpty) return const <String, double>{};
+
+    final first = outgoingTransactions.first.date;
+    final last = outgoingTransactions.last.date;
+    final result = <String, double>{};
+    for (
+      var cursor = DateTime(first.year, first.month);
+      !cursor.isAfter(DateTime(last.year, last.month));
+      cursor = DateTime(cursor.year, cursor.month + 1)
+    ) {
+      result[_monthKey(cursor)] = 0;
+    }
+
+    for (final tx in outgoingTransactions) {
+      final key = _monthKey(tx.date);
+      result.update(key, (v) => v + tx.amount, ifAbsent: () => tx.amount);
     }
     return result;
+  }
+
+  String _monthKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}';
   }
 
   Map<String, double> _lendingRemaining(List<ExpenseTransaction> txInRange) {
     final given = <String, double>{};
     final returned = <String, double>{};
-    for (final tx in txInRange.where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim().isNotEmpty)) {
+    for (final tx in txInRange.where(
+      (t) =>
+          t.category == 'Lending' &&
+          (t.subcategory ?? '').trim().isNotEmpty,
+    )) {
       final person = tx.subcategory!.trim();
       if (tx.type == 'Debit' || tx.type == 'Paid' || tx.type == 'paid') {
-        given.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
-      } else if (tx.type == 'Credit' || tx.type == 'Received' || tx.type == 'received') {
-        returned.update(person, (v) => v + tx.amount, ifAbsent: () => tx.amount);
+        given.update(
+          person,
+          (v) => v + tx.amount,
+          ifAbsent: () => tx.amount,
+        );
+      } else if (tx.type == 'Credit' ||
+          tx.type == 'Received' ||
+          tx.type == 'received') {
+        returned.update(
+          person,
+          (v) => v + tx.amount,
+          ifAbsent: () => tx.amount,
+        );
       }
     }
     final result = <String, double>{};
@@ -256,6 +414,93 @@ bool _isOutgoingType(String type) =>
 
 bool _isIncomingType(String type) =>
     type == 'Credit' || type == 'Received' || type == 'received';
+
+class _StatsTotalsGrid extends StatelessWidget {
+  const _StatsTotalsGrid({
+    required this.totalIncome,
+    required this.totalExpense,
+    required this.totalLending,
+    required this.totalReceived,
+  });
+
+  final double totalIncome;
+  final double totalExpense;
+  final double totalLending;
+  final double totalReceived;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      crossAxisCount: 2,
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 2.45,
+      children: [
+        _StatsTotalCard(
+          label: 'Total income',
+          amount: totalIncome,
+          color: Colors.green,
+        ),
+        _StatsTotalCard(
+          label: 'Total expense',
+          amount: totalExpense,
+          color: Colors.red,
+        ),
+        _StatsTotalCard(
+          label: 'Total lending',
+          amount: totalLending,
+          color: Colors.orange,
+        ),
+        _StatsTotalCard(
+          label: 'Total received',
+          amount: totalReceived,
+          color: Colors.blue,
+        ),
+      ],
+    );
+  }
+}
+
+class _StatsTotalCard extends StatelessWidget {
+  const _StatsTotalCard({
+    required this.label,
+    required this.amount,
+    required this.color,
+  });
+
+  final String label;
+  final double amount;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '₹${amount.toStringAsFixed(0)}',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _PieChartCard extends StatelessWidget {
   const _PieChartCard({required this.data});
@@ -285,7 +530,10 @@ class _PieChartCard extends StatelessWidget {
               child: CustomPaint(
                 painter: _PieChartPainter(
                   values: entries.map((e) => e.value).toList(),
-                  colors: List.generate(entries.length, (i) => colors[i % colors.length]),
+                  colors: List.generate(
+                    entries.length,
+                    (i) => colors[i % colors.length],
+                  ),
                   borderColor: Theme.of(context).colorScheme.surface,
                 ),
                 child: const SizedBox.expand(),
@@ -366,7 +614,9 @@ class _PieChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PieChartPainter oldDelegate) =>
-      oldDelegate.values != values || oldDelegate.colors != colors || oldDelegate.borderColor != borderColor;
+      oldDelegate.values != values ||
+      oldDelegate.colors != colors ||
+      oldDelegate.borderColor != borderColor;
 }
 
 class _SubcategoryBreakdown extends StatelessWidget {
@@ -383,12 +633,16 @@ class _SubcategoryBreakdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final grouped = <String, double>{};
-    for (final tx in transactions.where((t) => t.category == category)) {
-      final sub = (tx.subcategory ?? 'Uncategorized').trim().isEmpty ? 'Uncategorized' : tx.subcategory!.trim();
+    for (final tx in transactions.where(
+      (t) => t.category == category && _isOutgoingType(t.type),
+    )) {
+      final rawSubcategory = tx.subcategory?.trim() ?? '';
+      final sub = rawSubcategory.isEmpty ? 'Uncategorized' : rawSubcategory;
       grouped.update(sub, (v) => v + tx.amount, ifAbsent: () => tx.amount);
     }
     final total = grouped.values.fold<double>(0, (a, b) => a + b);
-    final sorted = grouped.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final sorted = grouped.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     if (sorted.isEmpty) return const Text('No subcategory data.');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,8 +655,12 @@ class _SubcategoryBreakdown extends StatelessWidget {
           return ListTile(
             dense: true,
             title: Text(entry.key),
-            trailing: Text('₹${entry.value.toStringAsFixed(0)} (${pct.toStringAsFixed(0)}%)'),
-            onTap: category == 'Lending' ? () => onSelectPerson(entry.key) : null,
+            trailing: Text(
+              '₹${entry.value.toStringAsFixed(0)} '
+              '(${pct.toStringAsFixed(0)}%)',
+            ),
+            onTap:
+                category == 'Lending' ? () => onSelectPerson(entry.key) : null,
           );
         }),
       ],
@@ -422,7 +680,9 @@ class _LendingPersonDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = transactions
-        .where((t) => t.category == 'Lending' && (t.subcategory ?? '').trim() == person)
+        .where(
+          (t) => t.category == 'Lending' && (t.subcategory ?? '').trim() == person,
+        )
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     var paid = 0.0;
@@ -430,7 +690,9 @@ class _LendingPersonDetailScreen extends StatelessWidget {
     for (final tx in items) {
       if (tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit') {
         paid += tx.amount;
-      } else if (tx.type == 'Received' || tx.type == 'received' || tx.type == 'Credit') {
+      } else if (tx.type == 'Received' ||
+          tx.type == 'received' ||
+          tx.type == 'Credit') {
         received += tx.amount;
       }
     }
@@ -446,7 +708,13 @@ class _LendingPersonDetailScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(person, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(
+                    person,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Text('Paid: ₹${paid.toStringAsFixed(0)}'),
                   Text('Received: ₹${received.toStringAsFixed(0)}'),
@@ -460,14 +728,18 @@ class _LendingPersonDetailScreen extends StatelessWidget {
           const SizedBox(height: 6),
           if (items.isEmpty) const Text('No lending transactions for this person.'),
           ...items.map((tx) {
-            final isPaid = tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit';
+            final isPaid =
+                tx.type == 'Paid' || tx.type == 'paid' || tx.type == 'Debit';
             final label = isPaid ? 'Paid' : 'Received';
             return ListTile(
               dense: true,
               title: Text('${tx.date.day}/${tx.date.month}/${tx.date.year}'),
               trailing: Text(
                 '${isPaid ? '-' : '+'}₹${tx.amount.toStringAsFixed(0)}',
-                style: TextStyle(color: isPaid ? Colors.red : Colors.green, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: isPaid ? Colors.red : Colors.green,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               subtitle: Text('$label ₹${tx.amount.toStringAsFixed(0)}'),
             );
