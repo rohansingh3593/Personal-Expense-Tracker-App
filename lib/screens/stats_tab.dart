@@ -19,6 +19,7 @@ class _StatsTabState extends State<StatsTab> {
   StatsRange _range = StatsRange.overall;
   DateTimeRange? _customRange;
   String? _selectedCategory;
+  DateTime _periodAnchor = DateTime.now();
 
   @override
   Widget build(BuildContext context) {
@@ -56,15 +57,10 @@ class _StatsTabState extends State<StatsTab> {
     final trendEntries = _monthTrend(txInRange).entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
 
-    final prevTotal = range == null
+    final previousRange = _previousRange(range);
+    final prevTotal = previousRange == null
         ? 0.0
-        : _transactionsForRange(
-            DateTimeRange(
-              start: range.start.subtract(range.duration),
-              end: range.start,
-            ),
-            inclusiveEnd: false,
-          )
+        : _transactionsForRange(previousRange)
             .where((t) => _isOutgoingType(t.type))
             .fold<double>(0, (s, t) => s + t.amount);
     final selectedSpend = totalExpense + totalLending;
@@ -105,36 +101,54 @@ class _StatsTabState extends State<StatsTab> {
               onChanged: (value) async {
                 if (value == null) return;
                 if (value == StatsRange.custom) {
-                  final picked = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(now.year + 1),
-                  );
-                  if (picked != null) {
-                    setState(() {
-                      _range = value;
-                      _customRange = DateTimeRange(
-                        start: picked.start,
-                        end: DateTime(
-                          picked.end.year,
-                          picked.end.month,
-                          picked.end.day,
-                          23,
-                          59,
-                          59,
-                          999,
-                        ),
-                      );
-                    });
-                  }
+                  setState(() => _range = value);
+                  await _pickCustomRange(now);
                   return;
                 }
-                setState(() => _range = value);
+                setState(() {
+                  _range = value;
+                  _periodAnchor = now;
+                });
               },
             ),
           ],
         ),
         const SizedBox(height: 8),
+        if (_range == StatsRange.custom)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () => _pickCustomRange(now),
+              icon: const Icon(Icons.date_range),
+              label: Text(
+                _customRange == null ? 'Pick date range' : _customRangeLabel(_customRange!),
+              ),
+            ),
+          ),
+        if (_range == StatsRange.weekly ||
+            _range == StatsRange.monthly ||
+            _range == StatsRange.yearly)
+          Row(
+            children: [
+              IconButton(
+                onPressed: _goToPreviousPeriod,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    _periodLabel(range ?? _resolveRange(now)!),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed:
+                    _canGoToNextPeriod(now) ? () => _goToNextPeriod(now) : null,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
         Card(
           child: ListTile(
             title: const Text('Insights'),
@@ -143,8 +157,9 @@ class _StatsTabState extends State<StatsTab> {
                   ? 'Showing complete account history with no date filter.'
                   : diffPct == null
                       ? 'Not enough previous data.'
-                      : 'You spent ${diffPct.abs().toStringAsFixed(1)}% '
-                          '${diffPct >= 0 ? 'more' : 'less'} than previous period.',
+                      : 'Compared with ${_previousPeriodLabel(range)}: you spent '
+                          '${diffPct.abs().toStringAsFixed(1)}% '
+                          '${diffPct >= 0 ? 'more' : 'less'}.',
             ),
           ),
         ),
@@ -286,15 +301,20 @@ class _StatsTabState extends State<StatsTab> {
       case StatsRange.overall:
         return null;
       case StatsRange.weekly:
-        final today = DateTime(now.year, now.month, now.day);
+        final today = DateTime(_periodAnchor.year, _periodAnchor.month, _periodAnchor.day);
         final startOfWeek = today.subtract(
           Duration(days: today.weekday - DateTime.monday),
         );
-        return DateTimeRange(start: startOfWeek, end: now);
+        final endOfWeek = startOfWeek.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59, milliseconds: 999));
+        return DateTimeRange(start: startOfWeek, end: endOfWeek.isAfter(now) ? now : endOfWeek);
       case StatsRange.monthly:
-        return DateTimeRange(start: DateTime(now.year, now.month, 1), end: now);
+        final monthStart = DateTime(_periodAnchor.year, _periodAnchor.month, 1);
+        final monthEnd = DateTime(_periodAnchor.year, _periodAnchor.month + 1, 0, 23, 59, 59, 999);
+        return DateTimeRange(start: monthStart, end: monthEnd.isAfter(now) ? now : monthEnd);
       case StatsRange.yearly:
-        return DateTimeRange(start: DateTime(now.year, 1, 1), end: now);
+        final yearStart = DateTime(_periodAnchor.year, 1, 1);
+        final yearEnd = DateTime(_periodAnchor.year, 12, 31, 23, 59, 59, 999);
+        return DateTimeRange(start: yearStart, end: yearEnd.isAfter(now) ? now : yearEnd);
       case StatsRange.custom:
         return DateTimeRange(
           start: now.subtract(const Duration(days: 30)),
@@ -302,6 +322,99 @@ class _StatsTabState extends State<StatsTab> {
         );
     }
   }
+
+  DateTimeRange? _previousRange(DateTimeRange? range) {
+    if (range == null || _range == StatsRange.overall || _range == StatsRange.custom) return null;
+    switch (_range) {
+      case StatsRange.weekly:
+        return DateTimeRange(start: range.start.subtract(const Duration(days: 7)), end: range.end.subtract(const Duration(days: 7)));
+      case StatsRange.monthly:
+        return DateTimeRange(
+          start: DateTime(range.start.year, range.start.month - 1, 1),
+          end: DateTime(range.start.year, range.start.month, 0, 23, 59, 59, 999),
+        );
+      case StatsRange.yearly:
+        return DateTimeRange(start: DateTime(range.start.year - 1, 1, 1), end: DateTime(range.start.year - 1, 12, 31, 23, 59, 59, 999));
+      default:
+        return null;
+    }
+  }
+
+  String _periodLabel(DateTimeRange range) {
+    switch (_range) {
+      case StatsRange.weekly:
+        return '${range.start.day} ${_monthShort(range.start.month)} ${range.start.year} - ${range.end.day} ${_monthShort(range.end.month)} ${range.end.year}';
+      case StatsRange.monthly:
+        return '${_monthLong(range.start.month)} ${range.start.year}';
+      case StatsRange.yearly:
+        return '${range.start.year}';
+      default:
+        return '';
+    }
+  }
+
+  String _previousPeriodLabel(DateTimeRange? currentRange) {
+    final prev = _previousRange(currentRange);
+    return prev == null ? 'previous period' : _periodLabel(prev);
+  }
+
+  String _monthShort(int m) => const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
+  String _monthLong(int m) => const ['January','February','March','April','May','June','July','August','September','October','November','December'][m - 1];
+
+  bool _canGoToNextPeriod(DateTime now) {
+    switch (_range) {
+      case StatsRange.weekly:
+        final start = DateTime(_periodAnchor.year, _periodAnchor.month, _periodAnchor.day).subtract(Duration(days: _periodAnchor.weekday - DateTime.monday));
+        final thisWeekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - DateTime.monday));
+        return start.isBefore(thisWeekStart);
+      case StatsRange.monthly:
+        return _periodAnchor.year < now.year || (_periodAnchor.year == now.year && _periodAnchor.month < now.month);
+      case StatsRange.yearly:
+        return _periodAnchor.year < now.year;
+      default:
+        return false;
+    }
+  }
+
+  void _goToPreviousPeriod() {
+    setState(() {
+      _periodAnchor = switch (_range) {
+        StatsRange.weekly => _periodAnchor.subtract(const Duration(days: 7)),
+        StatsRange.monthly => DateTime(_periodAnchor.year, _periodAnchor.month - 1, 1),
+        StatsRange.yearly => DateTime(_periodAnchor.year - 1, 1, 1),
+        _ => _periodAnchor,
+      };
+    });
+  }
+
+  void _goToNextPeriod(DateTime now) {
+    if (!_canGoToNextPeriod(now)) return;
+    setState(() {
+      _periodAnchor = switch (_range) {
+        StatsRange.weekly => _periodAnchor.add(const Duration(days: 7)),
+        StatsRange.monthly => DateTime(_periodAnchor.year, _periodAnchor.month + 1, 1),
+        StatsRange.yearly => DateTime(_periodAnchor.year + 1, 1, 1),
+        _ => _periodAnchor,
+      };
+    });
+  }
+
+  Future<void> _pickCustomRange(DateTime now) async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1),
+    );
+    if (picked == null) return;
+    setState(() {
+      _customRange = DateTimeRange(
+        start: picked.start,
+        end: DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59, 999),
+      );
+    });
+  }
+
+  String _customRangeLabel(DateTimeRange range) => '${range.start.day} ${_monthShort(range.start.month)} ${range.start.year} - ${range.end.day} ${_monthShort(range.end.month)} ${range.end.year}';
 
   List<ExpenseTransaction> _transactionsForRange(
     DateTimeRange? range, {
