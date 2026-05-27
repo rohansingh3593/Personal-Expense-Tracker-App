@@ -76,6 +76,12 @@ If release build fails with `Task 'assembleSafeRelease' not found`, your project
 
 2. **Only use `--flavor safe` if your Android app defines flavor `safe`** in `android/app/build.gradle` or `android/app/build.gradle.kts`.
 
+3. **Use the smart build helper script** in this repo:
+   ```bash
+   ./scripts/build_release.sh
+   ```
+   It auto-detects whether flavor `safe` exists and runs the correct Flutter build command.
+
 Also ensure this code is inside a full Flutter scaffold (`android/`, `ios/`, etc.). If missing, run:
 
 ```bash
